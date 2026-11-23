@@ -1,7 +1,6 @@
-// Ясно 2.1 — проверка через LanguageTool и осторожные локальные правила.
+// Ясно 3.0 — проверка через LanguageTool и осторожные локальные правила.
 // Текст не записывается в базу данных или логи приложения.
 const {reviewSuggestions}=require("../advanced-punctuation.js");
-const {aiPunctuation}=require("../ai-punctuation.js");
 const labels={punctuation:"Пунктуация",spelling:"Орфография",grammar:"Грамматика",style:"Совет по стилю"};
 const item=(offset,length,replacement,type,message,ruleId)=>({offset,length,message,replacements:[replacement],type,category:labels[type],ruleId});
 function localMatches(text,businessMode=false){
@@ -72,7 +71,6 @@ module.exports=async function handler(req,res){
  if(!text.trim()||text.length>10000)return res.status(400).json({error:"Введите текст до 10 000 символов."});
  const businessMode=body?.businessMode===true;
  const deepCheck=body?.deepCheck===true;
- const aiCheck=body?.aiCheck===true;
  async function checkLT(){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),6000);
@@ -93,23 +91,15 @@ module.exports=async function handler(req,res){
   }catch{return {complete:false,matches:[]};}
   finally{clearTimeout(timer);}
  }
- // Параллельные запросы не задерживают обычную проверку при отсутствии AI-ключа.
- const [lt,ai]=await Promise.all([
-   checkLT(),
-   aiCheck?aiPunctuation(text):Promise.resolve({status:"off",matches:[]})
- ]);
+ const lt=await checkLT();
  const base=localMatches(text,businessMode);
  const advanced=deepCheck?reviewSuggestions(text):[];
- const all=merge(lt.matches,[...base,...ai.matches,...advanced],text);
+ const all=merge(lt.matches,[...base,...advanced],text);
  const reviewCount=all.filter(x=>x.reviewOnly).length;
  const notes=[];
  if(!lt.complete)notes.push("LanguageTool временно недоступен. Проверка ограничена локальными правилами.");
- if(aiCheck&&ai.status==="not_configured")notes.push("ИИ-проверка ещё не настроена: нужен OPENAI_API_KEY в переменных окружения Vercel.");
- if(aiCheck&&ai.status==="too_long")notes.push("ИИ-проверка доступна для текстов не длиннее 1800 символов.");
- if(aiCheck&&ai.status==="unavailable")notes.push("ИИ-сервис сейчас не ответил. Остальные правила продолжили работу.");
- if(aiCheck&&ai.status==="invalid_response")notes.push("ИИ предложил изменить слова или форматирование; ответ отклонён ради сохранности текста.");
  return res.status(200).json({
-   matches:all,complete:lt.complete,reviewCount,deepCheck,aiStatus:ai.status,
+   matches:all,complete:lt.complete,reviewCount,deepCheck,engine:"rules-language-tool",
    note:notes.join(" "),mode:businessMode?"business":"standard"
  });
 };
