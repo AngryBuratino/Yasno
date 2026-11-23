@@ -93,18 +93,19 @@ test("extended punctuation mode is review-only and opt-in",async()=>{
   assert.equal(yes.body.complete,false);
  }finally{global.fetch=old}
 });
-test("AI unavailable without key does not break the check",async()=>{
- const old=global.fetch,oldKey=process.env.OPENAI_API_KEY;
- delete process.env.OPENAI_API_KEY;
- global.fetch=async()=>{throw Error("offline")};
+test("Passing AI parameters cannot trigger an AI provider",async()=>{
+ const old=global.fetch;
+ const seen=[];
+ global.fetch=async url=>{seen.push(url);throw Error("offline")};
  try{
-  const response=await invoke("POST",{text:"Если вам удобно давайте обсудим",deepCheck:true,aiCheck:true});
-  assert.equal(response.statusCode,200);
-  assert.equal(response.body.aiStatus,"not_configured");
-  assert.ok(response.body.note.includes("OPENAI_API_KEY"));
- }finally{global.fetch=old;if(oldKey!==undefined)process.env.OPENAI_API_KEY=oldKey}
+  const res=await invoke("POST",{text:"Я думаю что мы успеем",deepCheck:true,aiCheck:true});
+  assert.equal(res.statusCode,200);
+  assert.ok(res.body.matches.length>0);
+  assert.equal(res.body.engine,"rules-language-tool");
+  assert.ok(seen.every(x=>String(x).includes("languagetool.org")));
+  assert.ok(!JSON.stringify(res.body).includes("aiStatus"));
+ }finally{global.fetch=old}
 });
-
 test("high-confidence comma rules appear in corrected API suggestions",async()=>{
  const old=global.fetch;global.fetch=async()=>{throw Error("offline")};
  try{
