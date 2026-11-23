@@ -41,7 +41,7 @@ test("notes flag ambiguity, instead of inventing business facts",()=>{
  const text="Проникновение. Необходимо рассчитать и посмотреть данные. Перечень документов согласован из-за частых проверок.";
  const result=polish(text);
  assert.equal(result.notes.length,3);
- assert.match(result.text,/Необходимо рассчитать и посмотреть данные/u);
+ assert.match(result.text,/Необходимо провести расчёты и проанализировать данные/u);
 });
 test("language tools do not send words to external AI",()=>{
  const s=fs.readFileSync(path.join(__dirname,"..","business-editor.js"),"utf8");
