@@ -14,7 +14,7 @@
 <body>
 <header class="top"><div class="wrap top-inner">
   <div class="brand" aria-label="Ясно"><span class="logo">я</span>ясно<span class="dot">.</span></div>
-  <div class="top-controls"><span class="version">3.0 · без ИИ</span><button id="theme" type="button" class="icon-btn" title="Тёмная тема" aria-label="Переключить тему">☾</button><button id="install" type="button" class="icon-btn" title="Добавить на главный экран">↗</button></div>
+  <div class="top-controls"><span class="version">3.1 · без ИИ</span><button id="theme" type="button" class="icon-btn" title="Тёмная тема" aria-label="Переключить тему">☾</button><button id="install" type="button" class="icon-btn" title="Добавить на главный экран">↗</button></div>
 </div></header>
 <main class="wrap">
 <section class="hero"><div class="eyebrow">Русский язык · без ИИ</div><h1>Твои мысли — <span class="accent">без ошибок.</span></h1><p>Вставь текст, проверь возможные ошибки и скопируй готовый вариант. Разбирай каждое исправление, сохраняй нужные тексты и улучшай деловую переписку.</p></section>
@@ -24,7 +24,7 @@
   <div class="panel-title"><h2 id="editor-title">✎ Твой текст</h2><span class="small">До 10 000 символов</span></div>
   <div class="editor-box"><textarea class="editor" id="editor" maxlength="10000" spellcheck="true" aria-label="Текст для проверки" placeholder="Напиши сообщение или вставь текст для проверки..."></textarea></div>
   <div class="toolbar">
-   <button class="button primary" id="check" type="button">✦ Проверить текст</button>
+   <button class="button primary" id="check" type="button">✦ Проверить текст</button><button class="button light" id="businessPolish" type="button">✍ Деловая редактура</button>
    <button class="button light" id="example" type="button">Пример</button>
    <button class="button ghost" id="clear" type="button">Очистить</button>
    <span class="char-counter" id="counter">0 / 10 000</span>
@@ -71,7 +71,17 @@
      <div id="adviceList"></div>
    </div>
  </section>
- <div class="footer">🔒 Без ИИ и без платных токенов. Текст не сохраняется на нашем сервере. При проверке он отправляется во внешний LanguageTool; если он недоступен, работают только ограниченные встроенные правила. Автоматическая проверка может ошибаться. Не вставляй пароли или конфиденциальные данные.</div>
+ <section id="editorialResult" class="panel result-panel" aria-labelledby="editorialTitle" hidden>
+  <div class="panel-title"><h2 id="editorialTitle">✍ Деловая редактура · без ИИ</h2><span class="small">Текст для согласования</span></div>
+  <div class="result-inner">
+    <p class="small">Предлагаемая версия на основе понятных правил русского языка. Проверь факты и формулировки перед отправкой — сайт не понимает весь контекст как человек.</p>
+    <div class="ready" id="editorialText" aria-live="polite"></div>
+    <div class="result-actions"><button class="button primary" type="button" id="editorialCopy">⧉ Скопировать редакцию</button><button class="button light" id="editorialApply" type="button">↪ Перенести в редактор</button></div>
+    <div id="editorialChanges" class="small" aria-label="Внесённые правки"></div>
+    <div id="editorialNotes" aria-live="polite"></div>
+  </div>
+</section>
+<div class="footer">🔒 Без ИИ и без платных токенов. Текст не сохраняется на нашем сервере. При проверке он отправляется во внешний LanguageTool; если он недоступен, работают только ограниченные встроенные правила. Автоматическая проверка может ошибаться. Не вставляй пароли или конфиденциальные данные.</div>
 </div>
 <aside class="panel side" aria-label="Инструменты">
  <h3>Обзор текста</h3>
@@ -85,8 +95,8 @@
  <p class="small">Готовые варианты без ИИ. Выбери шаблон и отредактируй под себя.</p>
  <div id="templates" class="template-grid"></div>
  <div class="extra-divider"></div>
- <h3>Деловой тон</h3>
- <div class="row-input"><select class="mode-select" id="tone" aria-label="Вариант делового тона"><option value="neutral">Без изменений</option><option value="polite">Вежливее</option><option value="concise">Кратче</option></select><button type="button" class="button light" id="tonePreview">Показать</button></div>
+ <h3>Деловая редактура</h3>
+ <div class="row-input"><select class="mode-select" id="tone" aria-label="Вариант делового тона"><option value="neutral">Без изменений</option><option value="polite">Вежливее</option><option value="concise">Кратче</option><option value="editorial">Полная редактура встречи</option></select><button type="button" class="button light" id="tonePreview">Показать</button></div>
  <p id="toneText" class="small" aria-live="polite">Ограниченный набор понятных замен, без генеративного ИИ.</p>
  <button type="button" class="button ghost" id="toneApply" hidden>Применить к редактору</button>
  <div class="extra-divider"></div>
@@ -110,5 +120,6 @@
 <div class="toast" id="toast" aria-live="polite" hidden></div>
 <script src="/corrections.js" defer></script>
 <script src="/app-core.js" defer></script>
+<script src="/business-editor.js" defer></script>
 <script src="/app.js" defer></script>
 </body></html>
