@@ -10,7 +10,7 @@
   function compose(text,matches,includeStyle=false){
     const input=String(text||"");
     if(!Array.isArray(matches))return {text:input,applied:0,styleApplied:0};
-    const selected=matches.filter(m=>m&&(includeStyle||m.type!=="style")&&
+    const selected=matches.filter(m=>m&&!m.reviewOnly&&(includeStyle||m.type!=="style")&&
       Number.isInteger(m.offset)&&Number.isInteger(m.length)&&m.offset>=0&&m.length>=0&&
       m.offset+m.length<=input.length&&Array.isArray(m.replacements)&&m.replacements.length&&
       typeof m.replacements[0]==="string");
