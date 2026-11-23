@@ -22,6 +22,7 @@ function localMatches(text,businessMode=false){
  if(businessMode){
    add(/почты(?![А-Яа-яЁё])/giu,m=>{
      const before=text.slice(Math.max(0,m.index-90),m.index).split(/[.!?\n]/).pop();
+     if(/электронной[ \t]+$/iu.test(before))return null;
      return /(?:пришлите|напишите|отправьте|укажите)/iu.test(before)
        ?item(m.index,m[0].length,"адреса электронной почты","style","В деловом письме «адреса электронной почты» звучит точнее, чем «почты».","BUSINESS_EMAIL"):null;
    });
