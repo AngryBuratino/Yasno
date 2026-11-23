@@ -3,7 +3,7 @@ const assert=require("node:assert/strict");
 const {reviewSuggestions}=require("../advanced-punctuation.js");
 const {commaDiff,aiPunctuation}=require("../ai-punctuation.js");
 const {compose}=require("../corrections.js");
-test("Suggest complex subordinate boundaries for manual review",()=>{
+test("Detect subordinate boundaries with appropriate confidence",()=>{
  const samples=[
   ["Я думаю что мы успеем","SUBORDINATE_WHAT"],
   ["Напишу когда получу ответ","SUBORDINATE_CONJ"],
@@ -14,7 +14,8 @@ test("Suggest complex subordinate boundaries for manual review",()=>{
  for(const [s,id] of samples){
   const findings=reviewSuggestions(s);
   assert.ok(findings.some(x=>x.ruleId===id),s);
-  assert.ok(findings.every(x=>x.reviewOnly),s);
+  const expectedReview=!["SUBORDINATE_WHAT","SUBORDINATE_WHEN_SAFE"].includes(id);
+  assert.ok(findings.find(x=>x.ruleId===id).reviewOnly===expectedReview,s);
  }
 });
 test("Possible participial phrase has two manual comma tips",()=>{
@@ -31,10 +32,27 @@ test("Do not flag correctly punctuated sentences",()=>{
  ];
  for(const s of examples)assert.equal(reviewSuggestions(s).length,0,s);
 });
-test("Manual review suggestions never appear in automatic corrected text",()=>{
- const s="Я думаю что мы успеем",suggestions=reviewSuggestions(s);
+test("Manual review suggestions require explicit opt-in",()=>{
+ const s="Письмо которое обсуждали вчера готово",suggestions=reviewSuggestions(s);
+ assert.ok(suggestions.some(m=>m.reviewOnly));
  assert.equal(compose(s,suggestions,false).text,s);
  assert.equal(compose(s,suggestions,true).text,s);
+ assert.equal(compose(s,suggestions,false,true).text,"Письмо, которое обсуждали вчера готово");
+});
+test("Screenshot regression: both commas go into corrected text",()=>{
+ const s="Я думаю что мы сможем встретиться когда у всех будет время";
+ const suggestions=reviewSuggestions(s);
+ assert.equal(suggestions.filter(m=>!m.reviewOnly).length,2);
+ assert.equal(suggestions.filter(m=>m.reviewOnly).length,0);
+ assert.equal(compose(s,suggestions,false).text,
+  "Я думаю, что мы сможем встретиться, когда у всех будет время");
+});
+test("Other potentially ambiguous cases remain manual review",()=>{
+ const s="Мы обсудим всё когда получите ответ";
+ const suggestions=reviewSuggestions(s);
+ assert.ok(suggestions.length>0);
+ assert.ok(suggestions.every(m=>m.reviewOnly),s);
+ assert.equal(compose(s,suggestions,false).text,s);
 });
 test("Validate AI response changes commas only",()=>{
  const s="Я думаю что всё получится";
