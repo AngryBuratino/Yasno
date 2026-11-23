@@ -1,17 +1,23 @@
 "use strict";
-// Эвристики сложной пунктуации: все предложения требуют ручного подтверждения.
+// Эвристики сложной пунктуации: только узкие проверенные конструкции применяются автоматически.
+// Более неоднозначные запятые по-прежнему требуют явного подтверждения.
 function reviewSuggestions(text){
  const list=[],used=new Set();
- function mark(offset,id,reason){
+ function mark(offset,id,reason,reliable=false){
   if(!Number.isInteger(offset)||offset<0||offset>text.length||used.has(offset))return;
   if(text[offset-1]===","||text[offset]===","||/^[ \t]*,/.test(text.slice(offset)))return;
   used.add(offset);
   list.push({offset,length:0,replacements:[","],type:"punctuation",
-    category:"Сложная пунктуация",message:reason,ruleId:id,reviewOnly:true,source:"rules"});
+    category:"Сложная пунктуация",message:reason,ruleId:id,reviewOnly:!reliable,confidence:reliable?"high":"review",source:"rules"});
  }
  const rules=[
+  // Узкий набор глаголов + «когда» с последующим обстоятельством времени.
+  // Здесь союз вводит придаточную часть, а не прямой вопрос.
+  {re:/(встретиться|созвониться|встретимся|созвонимся|обсудим|напишу|отправлю|поговорим|перезвоню)([ 	]+)(когда)(?=[ 	]+(?:у[ 	]+|все[ 	]+|всё[ 	]+|вы[ 	]+|мы[ 	]+|я[ 	]+|будет[ 	]+|получим[ 	]+|получите[ 	]+|появится[ 	]+|сможем[ 	]+|сможете[ 	]+))/giu,
+    at:m=>m.index+m[1].length,id:"SUBORDINATE_WHEN_SAFE",reliable:true,
+    reason:"Перед придаточной частью с «когда» нужна запятая."},
   {re:/(думаю|считаю|надеюсь|понимаю|знаю|полагаю|уверен|уверена|уверены|кажется|выяснилось)([ \t]+)(что)(?=[ \t]+[А-Яа-яЁё])/giu,
-   at:m=>m.index+m[1].length,id:"SUBORDINATE_WHAT",
+   at:m=>m.index+m[1].length,id:"SUBORDINATE_WHAT",reliable:true,
    reason:"Здесь может начинаться придаточная часть с «что». Проверь разделение грамматических основ."},
   {re:/([А-Яа-яЁё]{2,})([ \t]+)(если|когда|потому[ \t]+что|так[ \t]+как|чтобы|хотя)(?=[ \t]+[А-Яа-яЁё])/giu,
    at:m=>m.index+m[1].length,id:"SUBORDINATE_CONJ",
@@ -27,7 +33,7 @@ function reviewSuggestions(text){
    at:m=>m.index+m[1].length+m[2].length,id:"INITIAL_SUBORDINATE",
    reason:"Похоже, здесь заканчивается придаточная часть перед главной. Проверь, где проходит граница."}
  ];
- for(const r of rules)for(const m of text.matchAll(r.re))if(!r.skip||!r.skip(m))mark(r.at(m),r.id,r.reason);
+ for(const r of rules)for(const m of text.matchAll(r.re))if(!r.skip||!r.skip(m))mark(r.at(m),r.id,r.reason,r.reliable===true);
  // Два возможных знака обособления причастного оборота.
  const p=/(Отчёт|Отчет|Документ|Документы|Письмо|Материалы)([ \t]+)(подготовленный|подготовленные|отправленный|отправленные|согласованный|согласованные|полученный|полученные)([ \t]+)(вчера|сегодня)([ \t]+)(уже|был|были|готов|готовы)/giu;
  for(const m of text.matchAll(p)){
