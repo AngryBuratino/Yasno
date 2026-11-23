@@ -47,3 +47,30 @@ test("successful provider response", async () => {
     assert.deepEqual(res.body.matches,[]);
   } finally {global.fetch=old;}
 });
+
+test("business mode gives optional style suggestions", async () => {
+ const old=global.fetch;global.fetch=async()=>{throw Error("offline")};
+ try{
+  const text="Пришлите пожалуйста почты и я создам встречу";
+  const full=await invoke("POST",{text,businessMode:true});
+  const standard=await invoke("POST",{text,businessMode:false});
+  for(const id of ["LOCAL_PLEASE_BOTH","LOCAL_AND_I","BUSINESS_EMAIL","BUSINESS_MEETING"]) assert.ok(full.body.matches.some(m=>m.ruleId===id),id);
+  assert.ok(!standard.body.matches.some(m=>m.type==="style"));
+ }finally{global.fetch=old}
+});
+test("correct please and business email has no local findings",async()=>{
+ const old=global.fetch;global.fetch=async()=>{throw Error("offline")};
+ try{
+  const r=await invoke("POST",{text:"Пришлите, пожалуйста, адреса электронной почты.",businessMode:true});
+  assert.equal(r.statusCode,200);assert.deepEqual(r.body.matches,[]);
+ }finally{global.fetch=old}
+});
+test("missing comma on either side of please",()=>{
+ const local=require("../api/check.js").localMatches;
+ for(const [s,id] of [["Пришлите, пожалуйста адреса","LOCAL_PLEASE_RIGHT"],["Пришлите пожалуйста, адреса","LOCAL_PLEASE_LEFT"],["Пожалуйста пришлите адреса","LOCAL_PLEASE_START"]]) assert.ok(local(s).some(x=>x.ruleId===id),s);
+});
+test("relative clauses and conjunctions",()=>{
+ const local=require("../api/check.js").localMatches;
+ assert.ok(local("Провёл встречи на которых обсудили проект").some(x=>x.ruleId==="LOCAL_RELATIVE"));
+ assert.ok(local("Напишите время а я посмотрю").some(x=>x.ruleId==="LOCAL_BUT"));
+});
