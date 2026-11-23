@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Ясно — проверка текста",
+  "short_name": "Ясно",
+  "description": "Русский язык: проверка текста, пунктуация и словарь без ИИ",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fc",
+  "theme_color": "#6456d9",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
