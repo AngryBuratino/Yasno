@@ -7,6 +7,8 @@ function localMatches(text,businessMode=false){
  const add=(re,fn)=>{for(const m of text.matchAll(re)){const v=fn(m);if(v)out.push(v)}};
  const swap=(re,repl,type,msg,id)=>add(re,m=>item(m.index,m[0].length,repl(m[0]),type,msg,id));
  swap(/на этой недели/giu,s=>s[0]===s[0].toUpperCase()?"На этой неделе":"на этой неделе","grammar","Правильно: «на этой неделе» (предложный падеж).","LOCAL_WEEK");
+ swap(/тоже самое/giu,s=>s[0]===s[0].toUpperCase()?"То же самое":"то же самое","spelling","В выражении «то же самое» частица «же» пишется отдельно.","LOCAL_SAME");
+ swap(/удалось[ \t]+познакомится/giu,s=>s.replace(/познакомится/iu,"познакомиться"),"grammar","После «удалось» требуется инфинитив «познакомиться».","LOCAL_MEET");
  swap(/треннинги/giu,s=>s[0]===s[0].toUpperCase()?"Тренинги":"тренинги","spelling","«Тренинги» пишется с одной «н» после «е».","LOCAL_TRAINING");
  swap(/интернет[ \t]+эквайринг[а-яё]*/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Интернет-эквайринг» пишется через дефис.","LOCAL_INTERNET");
  swap(/онлайн[ \t]+встреч[а-яё]*/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Онлайн-встреча» пишется через дефис.","LOCAL_ONLINE");

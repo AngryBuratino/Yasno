@@ -74,3 +74,9 @@ test("relative clauses and conjunctions",()=>{
  assert.ok(local("Провёл встречи на которых обсудили проект").some(x=>x.ruleId==="LOCAL_RELATIVE"));
  assert.ok(local("Напишите время а я посмотрю").some(x=>x.ruleId==="LOCAL_BUT"));
 });
+
+test("local rules for two additional frequent errors",()=>{
+ const local=require("../api/check.js").localMatches;
+ assert.ok(local("Это тоже самое").some(x=>x.ruleId==="LOCAL_SAME"));
+ assert.ok(local("Удалось познакомится с коллегами").some(x=>x.ruleId==="LOCAL_MEET"));
+});
