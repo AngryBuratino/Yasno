@@ -21,3 +21,12 @@ test("ignore invalid offsets and preserve markup as plain text",()=>{
 test("zero-length comma insertions",()=>{
  assert.equal(compose("А я",[{offset:1,length:0,type:"punctuation",replacements:[","]}],false).text,"А, я");
 });
+
+test("reviewOnly hints need explicit includeReview flag",()=>{
+ const s="Согласуем документ который подготовили вчера";
+ const matches=[{offset:s.indexOf(" который"),length:0,type:"punctuation",reviewOnly:true,replacements:[","]}];
+ assert.equal(compose(s,matches,false).text,s);
+ const confirmed=compose(s,matches,false,true);
+ assert.equal(confirmed.text,"Согласуем документ, который подготовили вчера");
+ assert.equal(confirmed.reviewApplied,1);
+});
