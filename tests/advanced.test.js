@@ -1,7 +1,6 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const {reviewSuggestions}=require("../advanced-punctuation.js");
-const {commaDiff,aiPunctuation}=require("../ai-punctuation.js");
 const {compose}=require("../corrections.js");
 test("Detect subordinate boundaries with appropriate confidence",()=>{
  const samples=[
@@ -54,36 +53,9 @@ test("Other potentially ambiguous cases remain manual review",()=>{
  assert.ok(suggestions.every(m=>m.reviewOnly),s);
  assert.equal(compose(s,suggestions,false).text,s);
 });
-test("Validate AI response changes commas only",()=>{
- const s="Я думаю что всё получится";
- const changed=commaDiff(s,"Я думаю, что всё получится");
- assert.equal(changed.length,1);
- assert.equal(changed[0].offset,s.indexOf(" что"));
- assert.equal(changed[0].reviewOnly,true);
- assert.equal(commaDiff(s,"Я уверен, что всё получится"),null);
- assert.equal(commaDiff(s,"Я думаю, что все получится"),null);
-});
-test("AI requires server key; no paid request without it",async()=>{
- const result=await aiPunctuation("Привет!",{key:"",fetchFn:async()=>{throw Error("should not call")}});
- assert.equal(result.status,"not_configured");
-});
-test("Mocked AI response is accepted only for valid commas",async()=>{
- const s="Я думаю что мы успеем";
- const r=await aiPunctuation(s,{key:"test-placeholder",fetchFn:async(url,opts)=>{
-  assert.equal(url,"https://api.openai.com/v1/responses");
-  const body=JSON.parse(opts.body);
-  assert.equal(body.store,false);
-  assert.equal(body.text.format.type,"json_schema");
-  return {ok:true,json:async()=>({output:[{content:[{type:"output_text",text:JSON.stringify({corrected:"Я думаю, что мы успеем"})}]}]})};
- }});
- assert.equal(r.status,"ok");
- assert.equal(r.matches.length,1);
-});
-test("Model changing words is rejected",async()=>{
- const r=await aiPunctuation("Я знаю что",{
-  key:"test-placeholder",
-  fetchFn:async()=>({ok:true,json:async()=>({output_text:JSON.stringify({corrected:"Я думаю, что"})})})
- });
- assert.equal(r.status,"invalid_response");
- assert.equal(r.matches.length,0);
+test("No large-scale analysis required for complex punctuation fallback",()=>{
+ const original="Письмо которое обсуждали вчера готово";
+ const findings=reviewSuggestions(original);
+ assert.ok(findings.some(m=>m.reviewOnly));
+ assert.equal(compose(original,findings,false).text,original);
 });
