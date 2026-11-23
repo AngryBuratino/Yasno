@@ -1,8 +1,8 @@
-/* Ясно 3.0: интерфейс, полностью без ИИ. */
+/* Ясно 3.1: интерфейс, полностью без ИИ. */
 (()=>{"use strict";
 const $=id=>document.getElementById(id);
-const C=window.YasnoCore,Fix=window.YasnoCorrections;
-if(!C||!Fix){document.body.dataset.error="modules";return;}
+const C=window.YasnoCore,Fix=window.YasnoCorrections,Business=window.YasnoBusiness;
+if(!C||!Fix||!Business){document.body.dataset.error="modules";return;}
 const editor=$("editor");
 const state={checkedText:"",matches:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
 const keys={dictionary:"yasno:dictionary:3",history:"yasno:history:3",draft:"yasno:draft:3",draftOn:"yasno:draft-enabled:3",theme:"yasno:theme:3"};
@@ -33,7 +33,7 @@ function persistDraft(){if(state.draftOn)save(keys.draft,editor.value)}
 function invalidate(){
  state.requestId++;if(state.controller){state.controller.abort();state.controller=null}
  $("check").disabled=false;$("check").textContent="✦ Проверить текст";
- state.checkedText="";state.matches=[];$("result").hidden=true;$("mistakes").textContent="—";
+ state.checkedText="";state.matches=[];$("result").hidden=true;$("editorialResult").hidden=true;$("mistakes").textContent="—";
  refreshMetrics();persistDraft();
 }
 editor.addEventListener("input",invalidate);
@@ -256,7 +256,36 @@ function renderTemplates(){
   box.append(b);
  }
 }
+let editorialSource="",editorialDraft=null;
+function previewEditorial(){
+ if(!editor.value.trim()){toast("Сначала введи текст для редактуры");editor.focus();return}
+ const text=editor.value;
+ editorialSource=text;editorialDraft=Business.polish(text);
+ $("editorialText").textContent=editorialDraft.text;
+ $("editorialChanges").textContent=editorialDraft.changes.length?
+   "Что изменено: "+editorialDraft.changes.map(c=>c.label+(c.count>1?" ("+c.count+")":"")).join("; ")+".":"Подходящих проверенных замен не найдено.";
+ const notes=$("editorialNotes");notes.replaceChildren();
+ for(const message of editorialDraft.notes){
+  const p=document.createElement("div");p.className="notice";p.textContent="Уточнение перед отправкой: "+message;notes.append(p);
+ }
+ $("editorialResult").hidden=false;
+ $("editorialApply").disabled=!editorialDraft.changed;
+ $("editorialResult").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("businessPolish").onclick=previewEditorial;
+$("editorialCopy").onclick=async()=>{
+ if(!editorialDraft||editorialSource!==editor.value){toast("Сначала повтори редактуру актуального текста");return}
+ const copied=await copyText(editorialDraft.text);toast(copied?"Деловой вариант скопирован":"Не удалось скопировать текст");
+};
+$("editorialApply").onclick=()=>{
+ if(!editorialDraft||editorialSource!==editor.value){toast("Текст изменился. Выполни редактуру ещё раз");return}
+ if(!editorialDraft.changed)return;
+ const revised=editorialDraft.text;
+ replaceEditor(revised);editorialDraft=null;editorialSource="";
+ toast("Деловой вариант перенесён в редактор");
+};
 $("tonePreview").onclick=()=>{
+ if($("tone").value==="editorial"){previewEditorial();return}
  if(!editor.value.trim()){toast("Введите текст для изменения формулировок");return}
  state.previewTone=C.toneVersion(editor.value,$("tone").value);
  $("toneText").textContent=state.previewTone===editor.value?"Для этого текста нет подходящих автоматических замен.":"Предварительный вариант: "+state.previewTone;
