@@ -85,10 +85,10 @@ test("extended punctuation mode is review-only and opt-in",async()=>{
  const old=global.fetch;
  global.fetch=async()=>{throw Error("offline")};
  try{
-  const text="Я думаю что мы сможем встретиться";
+  const text="Письмо которое обсуждали вчера готово";
   const yes=await invoke("POST",{text,deepCheck:true});
   const no=await invoke("POST",{text,deepCheck:false});
-  assert.ok(yes.body.matches.some(x=>x.reviewOnly&&x.ruleId==="SUBORDINATE_WHAT"));
+  assert.ok(yes.body.matches.some(x=>x.reviewOnly&&x.ruleId==="RELATIVE_CLAUSE"));
   assert.ok(!no.body.matches.some(x=>x.reviewOnly));
   assert.equal(yes.body.complete,false);
  }finally{global.fetch=old}
@@ -103,4 +103,17 @@ test("AI unavailable without key does not break the check",async()=>{
   assert.equal(response.body.aiStatus,"not_configured");
   assert.ok(response.body.note.includes("OPENAI_API_KEY"));
  }finally{global.fetch=old;if(oldKey!==undefined)process.env.OPENAI_API_KEY=oldKey}
+});
+
+test("high-confidence comma rules appear in corrected API suggestions",async()=>{
+ const old=global.fetch;global.fetch=async()=>{throw Error("offline")};
+ try{
+  const text="Я думаю что мы сможем встретиться когда у всех будет время";
+  const response=await invoke("POST",{text,deepCheck:true});
+  assert.equal(response.statusCode,200);
+  assert.equal(response.body.reviewCount,0);
+  const {compose}=require("../corrections.js");
+  assert.equal(compose(text,response.body.matches,false).text,
+    "Я думаю, что мы сможем встретиться, когда у всех будет время");
+ }finally{global.fetch=old}
 });
