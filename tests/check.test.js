@@ -80,3 +80,27 @@ test("local rules for two additional frequent errors",()=>{
  assert.ok(local("Это тоже самое").some(x=>x.ruleId==="LOCAL_SAME"));
  assert.ok(local("Удалось познакомится с коллегами").some(x=>x.ruleId==="LOCAL_MEET"));
 });
+
+test("extended punctuation mode is review-only and opt-in",async()=>{
+ const old=global.fetch;
+ global.fetch=async()=>{throw Error("offline")};
+ try{
+  const text="Я думаю что мы сможем встретиться";
+  const yes=await invoke("POST",{text,deepCheck:true});
+  const no=await invoke("POST",{text,deepCheck:false});
+  assert.ok(yes.body.matches.some(x=>x.reviewOnly&&x.ruleId==="SUBORDINATE_WHAT"));
+  assert.ok(!no.body.matches.some(x=>x.reviewOnly));
+  assert.equal(yes.body.complete,false);
+ }finally{global.fetch=old}
+});
+test("AI unavailable without key does not break the check",async()=>{
+ const old=global.fetch,oldKey=process.env.OPENAI_API_KEY;
+ delete process.env.OPENAI_API_KEY;
+ global.fetch=async()=>{throw Error("offline")};
+ try{
+  const response=await invoke("POST",{text:"Если вам удобно давайте обсудим",deepCheck:true,aiCheck:true});
+  assert.equal(response.statusCode,200);
+  assert.equal(response.body.aiStatus,"not_configured");
+  assert.ok(response.body.note.includes("OPENAI_API_KEY"));
+ }finally{global.fetch=old;if(oldKey!==undefined)process.env.OPENAI_API_KEY=oldKey}
+});
