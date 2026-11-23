@@ -1,6 +1,6 @@
 /* Ясно: PWA shell only. Text and API responses are NEVER cached. */
-const CACHE="yasno-static-v3";
-const ASSETS=["/","/index.html","/styles.css","/app-core.js","/app.js","/corrections.js","/icon.svg","/manifest.webmanifest"];
+const CACHE="yasno-static-v31";
+const ASSETS=["/","/index.html","/styles.css","/app-core.js","/business-editor.js","/app.js","/corrections.js","/icon.svg","/manifest.webmanifest"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });
