@@ -1,7 +1,7 @@
 name: Yasno tests
 on:
   push:
-    branches: [main, feature/complex-punctuation-23]
+    branches: [main, release/yasno-3-no-ai]
   pull_request:
 
 permissions:
