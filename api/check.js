@@ -1,5 +1,7 @@
 // Ясно 2.1 — проверка через LanguageTool и осторожные локальные правила.
 // Текст не записывается в базу данных или логи приложения.
+const {reviewSuggestions}=require("../advanced-punctuation.js");
+const {aiPunctuation}=require("../ai-punctuation.js");
 const labels={punctuation:"Пунктуация",spelling:"Орфография",grammar:"Грамматика",style:"Совет по стилю"};
 const item=(offset,length,replacement,type,message,ruleId)=>({offset,length,message,replacements:[replacement],type,category:labels[type],ruleId});
 function localMatches(text,businessMode=false){
@@ -62,27 +64,54 @@ module.exports=async function handler(req,res){
  res.setHeader("Cache-Control","no-store");res.setHeader("X-Content-Type-Options","nosniff");
  if(req.method!=="POST")return res.status(405).json({error:"Метод не поддерживается"});
  const origin=req.headers.origin;
- if(origin){try{if(new URL(origin).host!==req.headers.host)return res.status(403).json({error:"Запрос запрещён"});}catch{return res.status(403).json({error:"Некорректный запрос"});}}
- let body=req.body;if(typeof body==="string"){try{body=JSON.parse(body)}catch{body={}}}
+ if(origin){try{if(new URL(origin).host!==req.headers.host)return res.status(403).json({error:"Запрос запрещён"});}
+ catch{return res.status(403).json({error:"Некорректный запрос"});}}
+ let body=req.body;
+ if(typeof body==="string"){try{body=JSON.parse(body)}catch{body={}}}
  const text=typeof body?.text==="string"?body.text:"";
  if(!text.trim()||text.length>10000)return res.status(400).json({error:"Введите текст до 10 000 символов."});
  const businessMode=body?.businessMode===true;
- let remote=[],complete=false,note="";
- try{
-   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),7500);let response;
-   try{response=await fetch("https://api.languagetool.org/v2/check",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({text,language:"ru"}),signal:controller.signal});}
-   finally{clearTimeout(timer)}
-   if(!response.ok)throw Error("LanguageTool "+response.status);
-   const data=await response.json();
-   remote=(Array.isArray(data.matches)?data.matches:[]).map(m=>{
-      const type=kind(m);
-      return {offset:m.offset,length:m.length,message:String(m.message||"Проверь это место").slice(0,400),
-       replacements:(Array.isArray(m.replacements)?m.replacements:[]).slice(0,4).map(x=>String(x.value??"").slice(0,120)),
-       type,category:labels[type],ruleId:String(m.rule?.id||"")};
+ const deepCheck=body?.deepCheck===true;
+ const aiCheck=body?.aiCheck===true;
+ async function checkLT(){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),6000);
+  try{
+   const result=await fetch("https://api.languagetool.org/v2/check",{
+    method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:new URLSearchParams({text,language:"ru"}),signal:controller.signal
    });
-   complete=true;
- }catch{note="Доступна только ограниченная проверка встроенными правилами: LanguageTool не ответил. Полная проверка не выполнена.";}
- return res.status(200).json({matches:merge(remote,localMatches(text,businessMode),text),complete,note,mode:businessMode?"business":"standard"});
+   if(!result.ok)throw Error("LanguageTool "+result.status);
+   const data=await result.json();
+   const matches=(Array.isArray(data.matches)?data.matches:[]).map(m=>{
+    const type=kind(m);
+    return {offset:m.offset,length:m.length,message:String(m.message||"Проверь это место").slice(0,400),
+      replacements:(Array.isArray(m.replacements)?m.replacements:[]).slice(0,4).map(x=>String(x.value??"").slice(0,120)),
+      type,category:labels[type],ruleId:String(m.rule?.id||""),source:"LanguageTool"};
+   });
+   return {complete:true,matches};
+  }catch{return {complete:false,matches:[]};}
+  finally{clearTimeout(timer);}
+ }
+ // Параллельные запросы не задерживают обычную проверку при отсутствии AI-ключа.
+ const [lt,ai]=await Promise.all([
+   checkLT(),
+   aiCheck?aiPunctuation(text):Promise.resolve({status:"off",matches:[]})
+ ]);
+ const base=localMatches(text,businessMode);
+ const advanced=deepCheck?reviewSuggestions(text):[];
+ const all=merge(lt.matches,[...base,...ai.matches,...advanced],text);
+ const reviewCount=all.filter(x=>x.reviewOnly).length;
+ const notes=[];
+ if(!lt.complete)notes.push("LanguageTool временно недоступен. Проверка ограничена локальными правилами.");
+ if(aiCheck&&ai.status==="not_configured")notes.push("ИИ-проверка ещё не настроена: нужен OPENAI_API_KEY в переменных окружения Vercel.");
+ if(aiCheck&&ai.status==="too_long")notes.push("ИИ-проверка доступна для текстов не длиннее 1800 символов.");
+ if(aiCheck&&ai.status==="unavailable")notes.push("ИИ-сервис сейчас не ответил. Остальные правила продолжили работу.");
+ if(aiCheck&&ai.status==="invalid_response")notes.push("ИИ предложил изменить слова или форматирование; ответ отклонён ради сохранности текста.");
+ return res.status(200).json({
+   matches:all,complete:lt.complete,reviewCount,deepCheck,aiStatus:ai.status,
+   note:notes.join(" "),mode:businessMode?"business":"standard"
+ });
 };
 module.exports.localMatches=localMatches;
 module.exports.mergeMatches=merge;
