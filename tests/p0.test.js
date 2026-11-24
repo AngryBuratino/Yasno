@@ -77,7 +77,8 @@ test("invalid, empty and no-op provider candidates cannot block a local edit", a
   remote(8, 12, "x".repeat(121)), null,
   remote(0, 8, "Отправьте")
  ]);
- assert.equal(data.complete, true);
+ assert.equal(data.coverage, "partial");
+ assert.equal(data.complete, false);
  assert.ok(data.matches.some(m => m.ruleId === "LOCAL_PLEASE_BOTH"));
  assert.ok(data.matches.some(m => m.replacements.includes("Отправьте")));
  assert.equal(compose(text, data.matches, true, true).text, "Пришлите, пожалуйста, ответ");

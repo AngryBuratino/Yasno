@@ -1,3 +1,4 @@
+(function(root){
 "use strict";
 // Эвристики сложной пунктуации: только узкие проверенные конструкции применяются автоматически.
 // Более неоднозначные запятые по-прежнему требуют явного подтверждения.
@@ -50,4 +51,7 @@ function reviewSuggestions(text){
  }
  return list.sort((a,b)=>a.offset-b.offset);
 }
-module.exports={reviewSuggestions};
+const api={reviewSuggestions};
+if(typeof module!=="undefined"&&module.exports)module.exports=api;
+else root.YasnoAdvanced=api;
+})(typeof window!=="undefined"?window:{});
