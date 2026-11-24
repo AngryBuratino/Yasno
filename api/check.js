@@ -1,6 +1,7 @@
-// Ясно 3.0 — проверка через LanguageTool и осторожные локальные правила.
+// Ясно 3.2 — проверка через LanguageTool и осторожные локальные правила.
 // Текст не записывается в базу данных или логи приложения.
 const {reviewSuggestions}=require("../advanced-punctuation.js");
+const {suggest:sharedSuggestions}=require("../proofread-fallback.js");
 const labels={punctuation:"Пунктуация",spelling:"Орфография",grammar:"Грамматика",style:"Совет по стилю"};
 const item=(offset,length,replacement,type,message,ruleId)=>({offset,length,message,replacements:[replacement],type,category:labels[type],ruleId});
 function localMatches(text,businessMode=false){
@@ -47,7 +48,7 @@ function localMatches(text,businessMode=false){
    swap(/скиньте/giu,s=>s[0]===s[0].toUpperCase()?"Пришлите":"пришлите","style","Для делового письма лучше нейтральное «пришлите».","BUSINESS_SEND");
    add(/собрать[ \t]+ОС(?=$|[ \t,.:;!?])/gu,m=>item(m.index+m[0].lastIndexOf("ОС"),2,"обратную связь","style","Если «ОС» означает обратную связь, полная формулировка понятнее.","BUSINESS_FEEDBACK"));
  }
- return out;
+ return [...out,...sharedSuggestions(text)];
 }
 function kind(m){
  const s=((m.rule?.category?.id||"")+" "+(m.rule?.issueType||"")+" "+(m.rule?.id||"")).toUpperCase();
