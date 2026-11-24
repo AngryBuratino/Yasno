@@ -2,8 +2,10 @@
 // Текст не записывается в базу данных или логи приложения.
 const {reviewSuggestions}=require("../advanced-punctuation.js");
 const {suggest:sharedSuggestions}=require("../proofread-fallback.js");
+const {normalize,needsConfirmation}=require("../corrections.js");
 const labels={punctuation:"Пунктуация",spelling:"Орфография",grammar:"Грамматика",style:"Совет по стилю"};
 const item=(offset,length,replacement,type,message,ruleId)=>({offset,length,message,replacements:[replacement],type,category:labels[type],ruleId});
+const manual=match=>({...match,manualOnly:true});
 function localMatches(text,businessMode=false){
  const out=[];
  const add=(re,fn)=>{for(const m of text.matchAll(re)){const v=fn(m);if(v)out.push(v)}};
@@ -29,7 +31,7 @@ function localMatches(text,businessMode=false){
  add(/([А-Яа-яЁё])([ \t]+)(пожалуйста)(?=[ \t]*,)/giu,m=>item(m.index+m[1].length,m[2].length,", ","punctuation",please,"LOCAL_PLEASE_LEFT"));
  add(/(^|[.!?][ \t]+)(Пожалуйста)([ \t]+)(?=[А-Яа-яЁё])/gimu,m=>item(m.index+m[1].length,m[2].length,m[2]+",","punctuation",please,"LOCAL_PLEASE_START"));
  add(/(^|[\n.!?][ \t]*)(Коллеги)([ \t]+)(привет|добрый день)(?=$|[ \t!.,])/gimu,m=>item(m.index+m[1].length+m[2].length,0,",","punctuation","После обращения «коллеги» нужна запятая.","LOCAL_COLLEAGUES"));
- add(/([А-Яа-яЁё])([ \t]+)(а|но)(?=[ \t]+[А-Яа-яЁё])/giu,m=>item(m.index+m[1].length,0,",","punctuation","Перед противительным союзом «а» или «но» обычно ставится запятая.","LOCAL_BUT"));
+ add(/([А-Яа-яЁё])([ \t]+)(а|но)(?=[ \t]+[А-Яа-яЁё])/giu,m=>manual(item(m.index+m[1].length,0,",","punctuation","Если «а» или «но» соединяет части предложения, проверь запятую.","LOCAL_BUT")));
  add(/([А-Яа-яЁё])([ \t]+)(и я[ \t]+(?:создам|отправлю|проверю|посмотрю|назначу|организую|подготовлю|сверюсь))(?=$|[ \t.,!?])/giu,m=>item(m.index+m[1].length,0,",","punctuation","«И» соединяет две части предложения с разными грамматическими основами.","LOCAL_AND_I"));
  add(/(встречи)([ \t]+)(на которых)(?=[ \t]+[А-Яа-яЁё])/giu,m=>item(m.index+m[1].length,0,",","punctuation","Придаточная часть «на которых ...» отделяется запятой.","LOCAL_RELATIVE"));
  if(businessMode){
@@ -48,7 +50,7 @@ function localMatches(text,businessMode=false){
    swap(/скиньте/giu,s=>s[0]===s[0].toUpperCase()?"Пришлите":"пришлите","style","Для делового письма лучше нейтральное «пришлите».","BUSINESS_SEND");
    add(/собрать[ \t]+ОС(?=$|[ \t,.:;!?])/gu,m=>item(m.index+m[0].lastIndexOf("ОС"),2,"обратную связь","style","Если «ОС» означает обратную связь, полная формулировка понятнее.","BUSINESS_FEEDBACK"));
  }
- return [...out,...sharedSuggestions(text)];
+ return [...out.map(match=>match.type==="style"?manual(match):match),...sharedSuggestions(text)];
 }
 function kind(m){
  const s=((m.rule?.category?.id||"")+" "+(m.rule?.issueType||"")+" "+(m.rule?.id||"")).toUpperCase();
@@ -57,20 +59,13 @@ function kind(m){
  if(/STYLE|REDUNDAN|WORDINESS/.test(s))return "style";
  return "grammar";
 }
-function collision(a,b){
- if(a.length===0&&b.length===0)return a.offset===b.offset;
- if(a.length===0)return a.offset>b.offset&&a.offset<b.offset+b.length;
- if(b.length===0)return b.offset>a.offset&&b.offset<a.offset+a.length;
- return a.offset<b.offset+b.length&&b.offset<a.offset+a.length;
-}
 function merge(remote,local,text){
- const valid=m=>Number.isInteger(m.offset)&&Number.isInteger(m.length)&&m.offset>=0&&m.length>=0&&m.offset+m.length<=text.length;
- const accepted=[];
- const incoming=[...remote,...local.filter(x=>x.type!=="style"),...local.filter(x=>x.type==="style")];
- for(const m of incoming.filter(valid)){
-   if(!accepted.some(x=>collision(x,m)))accepted.push(m);
- }
- return accepted.sort((a,b)=>a.offset-b.offset).slice(0,100);
+ const candidates=normalize(text,[...local,...remote]);
+ const priority=match=>!match.replacements.length?3:needsConfirmation(match)?2:match.reviewOnly?1:0;
+ // Reserve the limited response first for applicable local rules. Competing
+ // candidates stay available for individual review without suppressing them.
+ return candidates.sort((a,b)=>priority(a)-priority(b)||a.offset-b.offset)
+  .slice(0,100).sort((a,b)=>a.offset-b.offset);
 }
 module.exports=async function handler(req,res){
  res.setHeader("Cache-Control","no-store");res.setHeader("X-Content-Type-Options","nosniff");
@@ -94,11 +89,13 @@ module.exports=async function handler(req,res){
    });
    if(!result.ok)throw Error("LanguageTool "+result.status);
    const data=await result.json();
-   const matches=(Array.isArray(data.matches)?data.matches:[]).map(m=>{
+   if(!Array.isArray(data?.matches))return {complete:false,matches:[]};
+   const matches=data.matches.filter(m=>m&&typeof m==="object").map(m=>{
     const type=kind(m);
-    return {offset:m.offset,length:m.length,message:String(m.message||"Проверь это место").slice(0,400),
-      replacements:(Array.isArray(m.replacements)?m.replacements:[]).slice(0,4).map(x=>String(x.value??"").slice(0,120)),
-      type,category:labels[type],ruleId:String(m.rule?.id||""),source:"LanguageTool"};
+    const variants=Array.isArray(m.replacements)?m.replacements:[];
+    return manual({offset:m.offset,length:m.length,message:String(m.message||"Проверь это место").slice(0,400),
+      replacements:variants.map(x=>x?.value).filter(value=>typeof value==="string"&&value.length<=120).slice(0,4),
+      type,category:labels[type],ruleId:String(m.rule?.id||""),source:"LanguageTool"});
    });
    return {complete:true,matches};
   }catch{return {complete:false,matches:[]};}
@@ -107,7 +104,9 @@ module.exports=async function handler(req,res){
  const lt=await checkLT();
  const base=localMatches(text,businessMode);
  const advanced=deepCheck?reviewSuggestions(text):[];
- const all=merge(lt.matches,[...base,...advanced],text);
+ const matches=merge(lt.matches,[...base,...advanced],text);
+ const all=body?.individualReview===true?matches:matches.map(match=>
+  needsConfirmation(match)?{...match,replacements:[]}:match);
  const reviewCount=all.filter(x=>x.reviewOnly).length;
  const notes=[];
  if(!lt.complete)notes.push("LanguageTool временно недоступен. Проверка ограничена локальными правилами.");

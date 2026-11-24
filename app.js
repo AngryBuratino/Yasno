@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const C=window.YasnoCore,Fix=window.YasnoCorrections,Business=window.YasnoBusiness;
 if(!C||!Fix||!Business){document.body.dataset.error="modules";return;}
 const editor=$("editor");
-const state={checkedText:"",matches:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
+const state={checkedText:"",comparisonText:"",matches:[],accepted:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
 const keys={dictionary:"yasno:dictionary:3",history:"yasno:history:3",draft:"yasno:draft:3",draftOn:"yasno:draft-enabled:3",theme:"yasno:theme:3"};
 const get=(k,fallback)=>{try{const s=localStorage.getItem(k);return s===null?fallback:JSON.parse(s)}catch{return fallback}};
 const save=(k,x)=>{try{localStorage.setItem(k,JSON.stringify(x));return true}catch{toast("Не удалось сохранить данные в этом браузере");return false}};
@@ -30,79 +30,111 @@ function refreshMetrics(){
  $("readingTime").textContent=stats.minutes+" мин";
 }
 function persistDraft(){if(state.draftOn)save(keys.draft,editor.value)}
-function invalidate(){
+function cancelCheck(){
  state.requestId++;if(state.controller){state.controller.abort();state.controller=null}
  $("check").disabled=false;$("check").textContent="✦ Проверить текст";
- state.checkedText="";state.matches=[];$("result").hidden=true;$("editorialResult").hidden=true;$("mistakes").textContent="—";
- refreshMetrics();persistDraft();
 }
-editor.addEventListener("input",invalidate);
-function replaceEditor(text){
- editor.value=String(text||"").slice(0,C.MAX_TEXT);invalidate();editor.focus();
+function invalidate(){
+ cancelCheck();
+ state.checkedText="";state.comparisonText="";state.matches=[];state.accepted=[];
+ $("result").hidden=true;$("mistakes").textContent="—";resetPreviews();
+ updateUndo();refreshMetrics();persistDraft();
+}
+function invalidateEditedText(){
+ state.undo=[];
+ invalidate();
+}
+editor.addEventListener("input",invalidateEditedText);
+function replaceEditor(text,undoable=false){
+ if(undoable)undoPush();
+ else state.undo=[];
+ editor.value=String(text||"");invalidate();editor.focus();
 }
 $("clear").onclick=()=>{if(editor.value&&!confirm("Очистить текущий текст?"))return;replaceEditor("")};
 $("example").onclick=()=>replaceEditor("Коллеги привет! На этой недели прошел треннинги. Пришлите пожалуйста почты и я создам встречу. Я думаю что мы сможем встретиться когда у всех будет время.");
-for(const id of ["deepCheck","businessMode"])$(id).addEventListener("change",invalidate);
+for(const id of ["deepCheck","businessMode"])$(id).addEventListener("change",invalidateEditedText);
 function selectedCorrections(){
- return Fix.compose(state.checkedText,state.matches,$("includeStyle").checked,$("includeReview").checked);
+ return Fix.compose(state.checkedText,state.matches,$("includeStyle").checked,$("includeReview").checked,state.accepted);
 }
 function appendText(parent,value,className){
  const el=document.createElement("span");el.textContent=value;
  if(className)el.className=className;
  parent.appendChild(el);
 }
-function compare(){
- const original=$("beforeDiff"),updated=$("afterDiff");
+function compare(before,after,beforeId="beforeDiff",afterId="afterDiff"){
+ const original=$(beforeId),updated=$(afterId);
  original.replaceChildren();updated.replaceChildren();
- for(const seg of C.diff(state.checkedText,selectedCorrections().text)){
+ for(const seg of C.diff(before,after)){
   if(seg.kind==="same"){appendText(original,seg.text);appendText(updated,seg.text);}
   if(seg.kind==="remove")appendText(original,seg.text,"diff-remove");
   if(seg.kind==="add")appendText(updated,seg.text,"diff-add");
  }
 }
+function canTransfer(result){
+ return result.confirmedApplied>0||result.text!==editor.value;
+}
 function renderCorrected(){
- const review=state.matches.filter(m=>m.reviewOnly).length;
+ const review=state.matches.filter(m=>m.reviewOnly&&!Fix.needsConfirmation(m)&&m.replacements.length).length;
  $("reviewLabel").hidden=review===0;
  if(!review)$("includeReview").checked=false;
- const result=selectedCorrections(),automatic=result.applied-(result.reviewApplied||0);
+ const result=selectedCorrections();
+ const counts=[];
+ if(result.applied)counts.push(result.applied+" к переносу");
+ if(result.confirmedApplied)counts.push(result.confirmedApplied+" подтверждено");
+ if(review)counts.push(review+" на проверку");
  $("correctedText").textContent=result.text;
- $("corrected-count").textContent=(automatic?automatic+" исправл.":"Нет автоисправлений")+(review?" · "+review+" на проверку":"");
- $("applyCorrected").disabled=result.applied===0;
+ $("corrected-count").textContent=counts.join(" · ")||"Нет правок к переносу";
+ $("applyCorrected").disabled=!canTransfer(result);
  $("copyCorrected").disabled=!state.checkedText;
- compare();
+ compare(state.comparisonText,result.text);
 }
 $("includeStyle").onchange=renderCorrected;
 $("includeReview").onchange=renderCorrected;
-function issueCard(m,index){
- const original=state.checkedText.slice(m.offset,m.offset+m.length);
- const card=document.createElement("article");card.className="issue"+(m.reviewOnly?" review":"");
+function issueCard(m,source,onApply,onSkip){
+ const review=m.reviewOnly||Fix.needsConfirmation(m);
+ const original=m.original;
+ const card=document.createElement("article");card.className="issue"+(review?" review":"");
  const head=document.createElement("div");head.className="issue-head";
- const title=document.createElement("strong");title.textContent=original||("Запятая после «"+state.checkedText.slice(Math.max(0,m.offset-22),m.offset).trim().split(/\s+/u).slice(-1)[0]+"»");
- const cat=document.createElement("span");cat.className="chip";cat.textContent=m.reviewOnly?"Проверь самостоятельно":m.category||"Замечание";
+ const title=document.createElement("strong");
+ const start=Math.max(0,m.offset-18),end=m.offset+m.length;
+ const left=source.slice(start,m.offset),right=source.slice(end,end+18);
+ title.textContent=original||("Вставка в «"+left+"▏"+right+"»");
+ const cat=document.createElement("span");cat.className="chip";cat.textContent=review?(m.source==="LanguageTool"?"LanguageTool · На проверку":"На проверку"):m.category||"Замечание";
  head.append(title,cat);
  const p=document.createElement("p");p.textContent=m.message||"Проверь этот фрагмент.";
  const change=document.createElement("div");change.className="issue-change";
  const before=document.createElement("del");before.textContent=original||"нет знака";
- const after=document.createElement("ins");after.textContent=m.replacements?.[0]??"Нет готовой замены";
+ const after=document.createElement("ins");
+ after.textContent=m.replacements[0]===""?"Удаление":m.replacements[0]??"Нет готовой замены";
  change.append(before,after);
  const buttons=document.createElement("div");buttons.className="issue-buttons";
- for(const value of (m.replacements||[]).slice(0,3)){
+ for(const value of m.replacements){
   const b=document.createElement("button");b.type="button";b.className="button light";
-  b.textContent=(m.reviewOnly?"Подтвердить: ":"Применить: ")+(value||"убрать");
-  b.onclick=()=>applyOne(index,value);buttons.appendChild(b);
+  b.textContent=(review?"Подтвердить: ":"Применить: ")+(value||"убрать");
+  b.onclick=()=>onApply(value);buttons.appendChild(b);
  }
  const skip=document.createElement("button");skip.type="button";skip.className="button ghost";skip.textContent="Пропустить";
- skip.onclick=()=>{state.matches.splice(index,1);render();toast("Подсказка пропущена")};
+ skip.onclick=onSkip;
  buttons.appendChild(skip);card.append(head,p,change,buttons);return card;
+}
+function skipMatch(context,index){
+ const skipped=context.matches[index];
+ for(const snapshot of [context,...context.undo]){
+  // Match objects are shared within one check, but a new check has its own objects.
+  snapshot.matches=snapshot.matches.filter(match=>match!==skipped);
+ }
 }
 function renderIssues(){
  const list=$("issuesList");list.replaceChildren();
  const entries=state.matches.map((m,i)=>({m,i})).filter(({m})=>
-  state.filter==="all"||(state.filter==="review"?Boolean(m.reviewOnly):m.type===state.filter));
+  state.filter==="all"||(state.filter==="review"?(m.reviewOnly||Fix.needsConfirmation(m)):m.type===state.filter));
  $("issues-count").textContent=entries.length+" показано";
  if(!entries.length){const p=document.createElement("p");p.className="empty";p.textContent="В этой категории замечаний нет.";list.append(p);}
- else for(const {m,i} of entries)list.append(issueCard(m,i));
- const tips=C.advice(state.checkedText),advice=$("adviceList");advice.replaceChildren();
+ else for(const {m,i} of entries)list.append(issueCard(m,state.checkedText,value=>applyOne(i,value),()=>{
+  skipMatch(state,i);
+  render();toast("Подсказка пропущена");
+ }));
+ const tips=C.advice(editor.value),advice=$("adviceList");advice.replaceChildren();
  for(const tip of tips){const p=document.createElement("div");p.className="notice";p.textContent="Совет по читаемости: "+tip.message;advice.appendChild(p)}
 }
 function render(){
@@ -112,8 +144,11 @@ function render(){
  const note=$("checkNotice");note.replaceChildren();
  if(state.lastNote){const p=document.createElement("div");p.className="notice";p.textContent=state.lastNote;note.appendChild(p)}
  else if(!state.matches.length){const p=document.createElement("div");p.className="notice ok";p.textContent="Явных ошибок не найдено. Это не гарантия идеальной пунктуации.";note.appendChild(p)}
- const review=state.matches.filter(m=>m.reviewOnly).length;
- if(review){const p=document.createElement("div");p.className="notice";p.textContent=review+" подсказок по сложным запятым требуют отдельного подтверждения и не входят в готовый вариант автоматически.";note.appendChild(p)}
+ if(state.matches.some(m=>Fix.needsConfirmation(m)&&m.replacements.length)){
+  const p=document.createElement("div");p.className="notice";
+  p.textContent="Спорные замены можно добавить только по одной в карточках замечаний.";
+  note.appendChild(p);
+ }
 }
 $("filters").onclick=e=>{
  const target=e.target.closest("button[data-filter]");if(!target)return;
@@ -121,35 +156,45 @@ $("filters").onclick=e=>{
  for(const b of $("filters").querySelectorAll("button"))b.classList.toggle("active",b===target);
  renderIssues();
 };
+function updateUndo(){
+ $("undo").disabled=state.undo.length===0;
+}
 function undoPush(){
- state.undo.push({text:state.checkedText,matches:state.matches.map(m=>({...m,replacements:[...(m.replacements||[])]}))});
+ state.undo.push({source:state.checkedText,comparisonText:state.comparisonText,text:editor.value,
+  matches:state.matches,accepted:state.accepted,lastNote:state.lastNote,resultVisible:!$("result").hidden,
+  includeStyle:$("includeStyle").checked,includeReview:$("includeReview").checked});
  if(state.undo.length>20)state.undo.shift();
 }
 $("undo").onclick=()=>{
- const prev=state.undo.pop();if(!prev){toast("Нет действий для отмены");return}
- state.checkedText=prev.text;state.matches=prev.matches;editor.value=prev.text;
- refreshMetrics();persistDraft();render();toast("Последнее изменение отменено");
+ const prev=state.undo.pop();if(!prev)return;
+ cancelCheck();
+ state.checkedText=prev.source;state.comparisonText=prev.comparisonText;state.lastNote=prev.lastNote;
+ state.matches=prev.matches;state.accepted=prev.accepted;editor.value=prev.text;
+ $("includeStyle").checked=prev.includeStyle;$("includeReview").checked=prev.includeReview;
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();
+ if(prev.resultVisible)render();
+ else {$("result").hidden=true;$("mistakes").textContent="—";}
+ toast("Последнее изменение отменено");
 };
 function applyOne(index,value){
- const m=state.matches[index];if(!m||typeof value!=="string")return;
- undoPush();
- const text=state.checkedText;
- const updated=text.slice(0,m.offset)+value+text.slice(m.offset+m.length);
- const delta=value.length-m.length;
- const lower=m.offset,upper=m.offset+m.length;
- state.matches=state.matches.filter((entry,i)=>{
-  if(i===index)return false;
-  if(entry.offset===m.offset&&entry.length===0)return false;
-  if(entry.offset<upper&&entry.offset+entry.length>lower)return false;
-  return true;
- }).map(entry=>({...entry,offset:entry.offset>m.offset?entry.offset+delta:entry.offset}));
- editor.value=updated;state.checkedText=updated;refreshMetrics();persistDraft();render();
+ const result=Fix.confirm(state.checkedText,state.matches,state.accepted,index,value);
+ if(!result)return;
+ cancelCheck();undoPush();
+ state.matches=result.matches;state.accepted=result.accepted;editor.value=result.text;
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();render();
 }
 $("applyCorrected").onclick=()=>{
- const {text,applied}=selectedCorrections();if(!applied)return;
- undoPush();editor.value=text;state.checkedText=text;state.matches=[];
+ const result=selectedCorrections();if(!canTransfer(result))return;
+ cancelCheck();
+ // Card confirmations already changed the editor. Closing that result must
+ // not add a duplicate edit or an empty step before the user's real undo.
+ if(result.text!==editor.value){
+  undoPush();
+  editor.value=result.text;
+ }
+ state.checkedText=result.text;state.matches=[];state.accepted=[];
  $("includeReview").checked=false;
- refreshMetrics();persistDraft();render();toast("Исправления перенесены в редактор");
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();render();toast("Исправления перенесены в редактор");
 };
 async function copyText(text){
  try{
@@ -161,25 +206,34 @@ async function copyText(text){
 $("copyCorrected").onclick=async()=>{
  const yes=await copyText(selectedCorrections().text);toast(yes?"Исправленный текст скопирован":"Не получилось скопировать — выдели текст вручную");
 };
+function normalizeApiMatches(text,matches){
+ if(!Array.isArray(matches))return [];
+ // Textarea values normalize line endings to LF. Do the same before a
+ // replacement enters the preview so transfer and undo use the same value.
+ return Fix.normalize(text,matches.map(match=>{
+  if(!Array.isArray(match?.replacements))return match;
+  return {...match,replacements:match.replacements.map(value=>typeof value==="string"?value.replace(/\r\n?/g,"\n"):value)};
+ }));
+}
 function checkNow(){
  if(!editor.value.trim()){editor.focus();toast("Сначала введи текст");return}
  state.controller?.abort();
  const controller=new AbortController(),seq=++state.requestId;state.controller=controller;
  const check=$("check");check.disabled=true;check.innerHTML='<span class="spinner"></span> Проверяем...';
- const text=editor.value,parameters={text,businessMode:$("businessMode").checked,deepCheck:$("deepCheck").checked};
+ const text=editor.value,parameters={text,individualReview:true,businessMode:$("businessMode").checked,deepCheck:$("deepCheck").checked};
  fetch("/api/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(parameters),signal:controller.signal})
  .then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||"Проверка временно недоступна");return data})
  .then(data=>{
   if(seq!==state.requestId||editor.value!==text)return;
-  state.undo=[];state.checkedText=text;state.complete=Boolean(data.complete);
-  state.matches=C.filterDictionary(text,(data.matches||[]).filter(m=>Number.isInteger(m.offset)&&m.offset>=0&&m.offset+m.length<=text.length),state.words);
+  state.checkedText=text;state.comparisonText=text;state.accepted=[];state.complete=Boolean(data.complete);
+  state.matches=C.filterDictionary(text,normalizeApiMatches(text,data.matches),state.words);
   state.lastNote=data.note||(!data.complete?"Сработала только ограниченная локальная проверка. Полный анализ недоступен.":"");
   $("includeReview").checked=false;$("includeStyle").checked=false;
   render();$("result").scrollIntoView({behavior:"smooth",block:"start"});
  })
  .catch(err=>{
-  if(seq!==state.requestId||err.name==="AbortError")return;
-  state.checkedText=text;state.matches=[];state.lastNote="Не удалось проверить текст: "+err.message;
+  if(seq!==state.requestId||editor.value!==text||err.name==="AbortError")return;
+  state.checkedText=text;state.comparisonText=text;state.matches=[];state.accepted=[];state.lastNote="Не удалось проверить текст: "+err.message;
   render();
  })
  .finally(()=>{
@@ -238,7 +292,7 @@ $("clearHistory").onclick=()=>{
  state.history=[];erase(keys.history);renderHistory();toast("История удалена");
 };
 const drafts=$("draftMode");state.draftOn=get(keys.draftOn,false)===true;drafts.checked=state.draftOn;
-if(state.draftOn){const savedDraft=get(keys.draft,"");if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft.slice(0,C.MAX_TEXT)}
+if(state.draftOn){const savedDraft=get(keys.draft,"");if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft}
 drafts.onchange=()=>{
  state.draftOn=drafts.checked;save(keys.draftOn,state.draftOn);
  if(state.draftOn){persistDraft();toast("Черновик сохраняется только на этом устройстве")}
@@ -256,32 +310,73 @@ function renderTemplates(){
   box.append(b);
  }
 }
-let editorialSource="",editorialDraft=null;
+let editorialDraft=null;
+const toneDescription=$("toneText").textContent;
+function resetTone(){
+ state.previewTone=null;$("toneApply").hidden=true;$("toneText").textContent=toneDescription;
+}
+function resetPreviews(){
+ editorialDraft=null;$("editorialResult").hidden=true;
+ resetTone();
+}
+$("tone").onchange=resetTone;
+function renderEditorial(){
+ const draft=editorialDraft;
+ $("editorialText").textContent=draft.text;
+ $("editorialApply").disabled=draft.text===draft.source;
+ $("editorialUndo").disabled=draft.undo.length===0;
+ $("editorial-count").textContent=draft.automaticCount+" авто · "+draft.accepted.length+" подтверждено";
+ compare(draft.source,draft.text,"editorialBeforeDiff","editorialAfterDiff");
+ const options=$("editorialSuggestions");
+ options.replaceChildren();
+ options.hidden=draft.matches.length===0;
+ for(const [index,match] of draft.matches.entries()){
+  options.append(issueCard(match,draft.base,value=>{
+   if(draft.source!==editor.value)return;
+   const result=Fix.confirm(draft.base,draft.matches,draft.accepted,index,value);
+   if(!result)return;
+   draft.undo.push({text:draft.text,matches:draft.matches,accepted:draft.accepted});
+   if(draft.undo.length>20)draft.undo.shift();
+   draft.text=result.text;draft.matches=result.matches;draft.accepted=result.accepted;
+   renderEditorial();
+   toast("Вариант добавлен в деловую редакцию");
+  },()=>{
+   skipMatch(draft,index);
+   renderEditorial();
+  }));
+ }
+}
 function previewEditorial(){
  if(!editor.value.trim()){toast("Сначала введи текст для редактуры");editor.focus();return}
- const text=editor.value;
- editorialSource=text;editorialDraft=Business.polish(text);
- $("editorialText").textContent=editorialDraft.text;
- $("editorialChanges").textContent=editorialDraft.changes.length?
-   "Что изменено: "+editorialDraft.changes.map(c=>c.label+(c.count>1?" ("+c.count+")":"")).join("; ")+".":"Подходящих проверенных замен не найдено.";
+ const source=editor.value,result=Business.polish(source);
+ editorialDraft={source,base:result.text,text:result.text,matches:result.suggestions,accepted:[],undo:[],
+  automaticCount:result.changes.reduce((total,change)=>total+change.count,0)};
+ $("editorialChanges").textContent=result.changes.length?
+   "Что изменено: "+result.changes.map(c=>c.label+(c.count>1?" ("+c.count+")":"")).join("; ")+".":"Автоматических правок нет.";
  const notes=$("editorialNotes");notes.replaceChildren();
- for(const message of editorialDraft.notes){
+ for(const message of result.notes){
   const p=document.createElement("div");p.className="notice";p.textContent="Уточнение перед отправкой: "+message;notes.append(p);
  }
  $("editorialResult").hidden=false;
- $("editorialApply").disabled=!editorialDraft.changed;
+ renderEditorial();
  $("editorialResult").scrollIntoView({behavior:"smooth",block:"start"});
 }
 $("businessPolish").onclick=previewEditorial;
+$("editorialUndo").onclick=()=>{
+ const previous=editorialDraft?.undo.pop();
+ if(!previous)return;
+ Object.assign(editorialDraft,previous);
+ renderEditorial();
+ toast("Последний вариант отменён");
+};
 $("editorialCopy").onclick=async()=>{
- if(!editorialDraft||editorialSource!==editor.value){toast("Сначала повтори редактуру актуального текста");return}
+ if(!editorialDraft||editorialDraft.source!==editor.value){toast("Сначала повтори редактуру актуального текста");return}
  const copied=await copyText(editorialDraft.text);toast(copied?"Деловой вариант скопирован":"Не удалось скопировать текст");
 };
 $("editorialApply").onclick=()=>{
- if(!editorialDraft||editorialSource!==editor.value){toast("Текст изменился. Выполни редактуру ещё раз");return}
- if(!editorialDraft.changed)return;
- const revised=editorialDraft.text;
- replaceEditor(revised);editorialDraft=null;editorialSource="";
+ if(!editorialDraft||editorialDraft.source!==editor.value){toast("Текст изменился. Выполни редактуру ещё раз");return}
+ if(editorialDraft.text===editor.value)return;
+ replaceEditor(editorialDraft.text,true);
  toast("Деловой вариант перенесён в редактор");
 };
 $("tonePreview").onclick=()=>{
@@ -291,8 +386,7 @@ $("tonePreview").onclick=()=>{
  $("toneText").textContent=state.previewTone===editor.value?"Для этого текста нет подходящих автоматических замен.":"Предварительный вариант: "+state.previewTone;
  $("toneApply").hidden=state.previewTone===editor.value;
 };
-$("toneApply").onclick=()=>{if(state.previewTone===null)return;replaceEditor(state.previewTone);$("toneApply").hidden=true;state.previewTone=null;toast("Формулировки применены")};
-editor.addEventListener("input",()=>{$("toneApply").hidden=true;state.previewTone=null});
+$("toneApply").onclick=()=>{if(state.previewTone===null)return;replaceEditor(state.previewTone,true);toast("Формулировки применены")};
 let installPrompt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e});
 $("install").onclick=async()=>{
@@ -303,7 +397,7 @@ if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.ser
 state.words=get(keys.dictionary,[]);if(!Array.isArray(state.words))state.words=[];
 state.words=state.words.filter(C.validDictionaryWord).slice(0,80);
 state.history=get(keys.history,[]);if(!Array.isArray(state.history))state.history=[];
-state.history=state.history.filter(x=>x&&typeof x.text==="string"&&x.text.length<=C.MAX_TEXT).slice(0,12);
+state.history=state.history.filter(x=>x&&typeof x.text==="string").slice(0,12);
 renderMetricsSafe();renderDictionary();renderHistory();renderTemplates();
 function renderMetricsSafe(){refreshMetrics()}
 })();

@@ -37,24 +37,9 @@
     "В конце законченного предложения нужна точка.","EMAIL_PERIOD"));
   return matches.sort((a,b)=>a.offset-b.offset||b.length-a.length);
  }
+ const Fix=typeof module!=="undefined"&&module.exports?require("./corrections.js"):root.YasnoCorrections;
  function apply(text,matches){
-  const input=String(text||"");
-  const ordered=(matches||[]).filter(m=>m&&Number.isInteger(m.offset)&&Number.isInteger(m.length)&&m.offset>=0&&m.length>=0&&m.offset+m.length<=input.length&&Array.isArray(m.replacements)&&typeof m.replacements[0]==="string")
-   .sort((a,b)=>a.offset-b.offset||b.length-a.length);
-  const safe=[];
-  function overlaps(a,b){
-   if(a.length===0&&b.length===0)return a.offset===b.offset;
-   if(a.length===0)return a.offset>b.offset&&a.offset<b.offset+b.length;
-   if(b.length===0)return b.offset>a.offset&&b.offset<a.offset+a.length;
-   return a.offset<b.offset+b.length&&b.offset<a.offset+a.length;
-  }
-  for(const m of ordered)if(!safe.some(other=>overlaps(other,m)))safe.push(m);
-  let output=input;
-  for(const m of [...safe].sort((a,b)=>b.offset-a.offset||b.length-a.length)){
-   const replacement=m.replacements[0];
-   output=output.slice(0,m.offset)+replacement+output.slice(m.offset+m.length);
-  }
-  return output;
+  return Fix.compose(text,matches).text;
  }
  const api={suggest,apply};
  if(typeof module!=="undefined"&&module.exports)module.exports=api;

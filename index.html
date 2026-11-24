@@ -27,6 +27,7 @@
    <button class="button primary" id="check" type="button">✦ Проверить текст</button><button class="button light" id="businessPolish" type="button">✍ Деловая редактура</button>
    <button class="button light" id="example" type="button">Пример</button>
    <button class="button ghost" id="clear" type="button">Очистить</button>
+   <button type="button" class="button ghost" id="undo" disabled>↶ Отменить</button>
    <span class="char-counter" id="counter">0 / 10 000</span>
   </div>
   <details class="settings" id="settings"><summary>Настройки проверки</summary>
@@ -50,7 +51,6 @@
        <button type="button" class="button primary" id="copyCorrected">⧉ Скопировать исправленный</button>
        <button type="button" class="button light" id="applyCorrected">↪ Перенести в редактор</button>
        <button type="button" class="button light" id="saveResult">♡ Сохранить</button>
-       <button type="button" class="button ghost" id="undo">↶ Отменить</button>
      </div>
      <div id="checkNotice" aria-live="polite"></div>
      <div class="compare-head"><h3>Сравнение «Было / Стало»</h3><span class="small">Изменения выделены цветом</span></div>
@@ -75,10 +75,17 @@
   <div class="panel-title"><h2 id="editorialTitle">✍ Деловая редактура · без ИИ</h2><span class="small">Текст для согласования</span></div>
   <div class="result-inner">
     <p class="small">Предлагаемая версия на основе понятных правил русского языка. Проверь факты и формулировки перед отправкой — сайт не понимает весь контекст как человек.</p>
+    <div class="result-top"><strong>Деловой вариант</strong><span class="small" id="editorial-count">—</span></div>
     <div class="ready" id="editorialText" aria-live="polite"></div>
-    <div class="result-actions"><button class="button primary" type="button" id="editorialCopy">⧉ Скопировать редакцию</button><button class="button light" id="editorialApply" type="button">↪ Перенести в редактор</button></div>
+    <div class="result-actions"><button class="button primary" type="button" id="editorialCopy">⧉ Скопировать редакцию</button><button class="button light" id="editorialApply" type="button">↪ Перенести в редактор</button><button class="button ghost" id="editorialUndo" type="button" disabled>↶ Отменить вариант</button></div>
+    <div class="compare-head"><h3>Сравнение «Было / Стало»</h3></div>
+    <div class="diff-columns">
+      <div class="diff-card"><div class="diff-label">Было</div><div class="diff-text" id="editorialBeforeDiff"></div></div>
+      <div class="diff-card"><div class="diff-label">Стало</div><div class="diff-text" id="editorialAfterDiff"></div></div>
+    </div>
     <div id="editorialChanges" class="small" aria-label="Внесённые правки"></div>
     <div id="editorialNotes" aria-live="polite"></div>
+    <div id="editorialSuggestions" aria-label="Варианты для отдельного подтверждения" hidden></div>
   </div>
 </section>
 <div class="footer">🔒 Без ИИ и без платных токенов. Текст не сохраняется на нашем сервере. При проверке он отправляется во внешний LanguageTool; если он недоступен, работают только ограниченные встроенные правила. Автоматическая проверка может ошибаться. Не вставляй пароли или конфиденциальные данные.</div>

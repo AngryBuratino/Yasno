@@ -21,7 +21,7 @@ test("bank issuers and explanatory abbreviations",()=>{
 test("headings work with Latin and Cyrillic names",()=>{
  assert.equal(polish("4. Способы оплаты – SberPay и СБП.").text,"4. Способы оплаты\n\nSberPay и СБП.");
  assert.equal(polish("5. Рассрочка и сервис «долями» - в этом потребности нет т.к. есть своя внутренняя рассрочка.").text,
-  "5. Рассрочка и сервис «Долями»\n\nВ этом нет потребности, так как уже действует собственная рассрочка.");
+  "5. Рассрочка и сервис «Долями»\n\nВ этом нет потребности, так как есть своя внутренняя рассрочка.");
 });
 test("business editor does not double existing commas or repeat correct brand suggestions",()=>{
  const correct="Сервисы, такие как Robokassa и Prodamus, помогают клиентам, так как это удобно.";
@@ -41,7 +41,8 @@ test("notes flag ambiguity, instead of inventing business facts",()=>{
  const text="Проникновение. Необходимо рассчитать и посмотреть данные. Перечень документов согласован из-за частых проверок.";
  const result=polish(text);
  assert.equal(result.notes.length,3);
- assert.match(result.text,/Необходимо провести расчёты и проанализировать данные/u);
+ assert.equal(result.text,text);
+ assert.ok(result.suggestions.some(match=>match.ruleId==="CALC"&&match.manualOnly));
 });
 test("language tools do not send words to external AI",()=>{
  const s=fs.readFileSync(path.join(__dirname,"..","business-editor.js"),"utf8");
