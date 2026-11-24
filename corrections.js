@@ -65,6 +65,7 @@
   return {
    text:render(input,[...confirmed,...pending]),
    applied:pending.length,
+   confirmedApplied:confirmed.length,
    styleApplied:pending.filter(m=>m.type==="style").length,
    reviewApplied:pending.filter(m=>m.reviewOnly).length
   };

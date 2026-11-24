@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const C=window.YasnoCore,Fix=window.YasnoCorrections,Business=window.YasnoBusiness;
 if(!C||!Fix||!Business){document.body.dataset.error="modules";return;}
 const editor=$("editor");
-const state={checkedText:"",matches:[],accepted:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
+const state={checkedText:"",comparisonText:"",matches:[],accepted:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
 const keys={dictionary:"yasno:dictionary:3",history:"yasno:history:3",draft:"yasno:draft:3",draftOn:"yasno:draft-enabled:3",theme:"yasno:theme:3"};
 const get=(k,fallback)=>{try{const s=localStorage.getItem(k);return s===null?fallback:JSON.parse(s)}catch{return fallback}};
 const save=(k,x)=>{try{localStorage.setItem(k,JSON.stringify(x));return true}catch{toast("Не удалось сохранить данные в этом браузере");return false}};
@@ -30,20 +30,29 @@ function refreshMetrics(){
  $("readingTime").textContent=stats.minutes+" мин";
 }
 function persistDraft(){if(state.draftOn)save(keys.draft,editor.value)}
-function invalidate(){
+function cancelCheck(){
  state.requestId++;if(state.controller){state.controller.abort();state.controller=null}
  $("check").disabled=false;$("check").textContent="✦ Проверить текст";
- state.checkedText="";state.matches=[];state.accepted=[];state.undo=[];
- $("result").hidden=true;$("mistakes").textContent="—";resetPreviews();
- refreshMetrics();persistDraft();
 }
-editor.addEventListener("input",invalidate);
-function replaceEditor(text){
+function invalidate(){
+ cancelCheck();
+ state.checkedText="";state.comparisonText="";state.matches=[];state.accepted=[];
+ $("result").hidden=true;$("mistakes").textContent="—";resetPreviews();
+ updateUndo();refreshMetrics();persistDraft();
+}
+function invalidateEditedText(){
+ state.undo=[];
+ invalidate();
+}
+editor.addEventListener("input",invalidateEditedText);
+function replaceEditor(text,undoable=false){
+ if(undoable)undoPush();
+ else state.undo=[];
  editor.value=String(text||"");invalidate();editor.focus();
 }
 $("clear").onclick=()=>{if(editor.value&&!confirm("Очистить текущий текст?"))return;replaceEditor("")};
 $("example").onclick=()=>replaceEditor("Коллеги привет! На этой недели прошел треннинги. Пришлите пожалуйста почты и я создам встречу. Я думаю что мы сможем встретиться когда у всех будет время.");
-for(const id of ["deepCheck","businessMode"])$(id).addEventListener("change",invalidate);
+for(const id of ["deepCheck","businessMode"])$(id).addEventListener("change",invalidateEditedText);
 function selectedCorrections(){
  return Fix.compose(state.checkedText,state.matches,$("includeStyle").checked,$("includeReview").checked,state.accepted);
 }
@@ -52,25 +61,32 @@ function appendText(parent,value,className){
  if(className)el.className=className;
  parent.appendChild(el);
 }
-function compare(corrected){
- const original=$("beforeDiff"),updated=$("afterDiff");
+function compare(before,after,beforeId="beforeDiff",afterId="afterDiff"){
+ const original=$(beforeId),updated=$(afterId);
  original.replaceChildren();updated.replaceChildren();
- for(const seg of C.diff(editor.value,corrected)){
+ for(const seg of C.diff(before,after)){
   if(seg.kind==="same"){appendText(original,seg.text);appendText(updated,seg.text);}
   if(seg.kind==="remove")appendText(original,seg.text,"diff-remove");
   if(seg.kind==="add")appendText(updated,seg.text,"diff-add");
  }
 }
+function canTransfer(result){
+ return result.confirmedApplied>0||result.text!==editor.value;
+}
 function renderCorrected(){
  const review=state.matches.filter(m=>m.reviewOnly&&!Fix.needsConfirmation(m)&&m.replacements.length).length;
  $("reviewLabel").hidden=review===0;
  if(!review)$("includeReview").checked=false;
- const result=selectedCorrections(),automatic=result.applied-(result.reviewApplied||0);
+ const result=selectedCorrections();
+ const counts=[];
+ if(result.applied)counts.push(result.applied+" к переносу");
+ if(result.confirmedApplied)counts.push(result.confirmedApplied+" подтверждено");
+ if(review)counts.push(review+" на проверку");
  $("correctedText").textContent=result.text;
- $("corrected-count").textContent=(automatic?automatic+" исправл.":"Нет автоисправлений")+(review?" · "+review+" на проверку":"");
- $("applyCorrected").disabled=result.applied===0;
+ $("corrected-count").textContent=counts.join(" · ")||"Нет правок к переносу";
+ $("applyCorrected").disabled=!canTransfer(result);
  $("copyCorrected").disabled=!state.checkedText;
- compare(result.text);
+ compare(state.comparisonText,result.text);
 }
 $("includeStyle").onchange=renderCorrected;
 $("includeReview").onchange=renderCorrected;
@@ -101,6 +117,13 @@ function issueCard(m,source,onApply,onSkip){
  skip.onclick=onSkip;
  buttons.appendChild(skip);card.append(head,p,change,buttons);return card;
 }
+function skipMatch(context,index){
+ const skipped=context.matches[index];
+ for(const snapshot of [context,...context.undo]){
+  // Match objects are shared within one check, but a new check has its own objects.
+  snapshot.matches=snapshot.matches.filter(match=>match!==skipped);
+ }
+}
 function renderIssues(){
  const list=$("issuesList");list.replaceChildren();
  const entries=state.matches.map((m,i)=>({m,i})).filter(({m})=>
@@ -108,7 +131,7 @@ function renderIssues(){
  $("issues-count").textContent=entries.length+" показано";
  if(!entries.length){const p=document.createElement("p");p.className="empty";p.textContent="В этой категории замечаний нет.";list.append(p);}
  else for(const {m,i} of entries)list.append(issueCard(m,state.checkedText,value=>applyOne(i,value),()=>{
-  state.matches=state.matches.filter((_,index)=>index!==i);
+  skipMatch(state,i);
   render();toast("Подсказка пропущена");
  }));
  const tips=C.advice(editor.value),advice=$("adviceList");advice.replaceChildren();
@@ -133,27 +156,45 @@ $("filters").onclick=e=>{
  for(const b of $("filters").querySelectorAll("button"))b.classList.toggle("active",b===target);
  renderIssues();
 };
+function updateUndo(){
+ $("undo").disabled=state.undo.length===0;
+}
 function undoPush(){
- state.undo.push({source:state.checkedText,text:editor.value,matches:state.matches,accepted:state.accepted});
+ state.undo.push({source:state.checkedText,comparisonText:state.comparisonText,text:editor.value,
+  matches:state.matches,accepted:state.accepted,lastNote:state.lastNote,resultVisible:!$("result").hidden,
+  includeStyle:$("includeStyle").checked,includeReview:$("includeReview").checked});
  if(state.undo.length>20)state.undo.shift();
 }
 $("undo").onclick=()=>{
- const prev=state.undo.pop();if(!prev){toast("Нет действий для отмены");return}
- state.checkedText=prev.source;state.matches=prev.matches;state.accepted=prev.accepted;editor.value=prev.text;
- resetPreviews();refreshMetrics();persistDraft();render();toast("Последнее изменение отменено");
+ const prev=state.undo.pop();if(!prev)return;
+ cancelCheck();
+ state.checkedText=prev.source;state.comparisonText=prev.comparisonText;state.lastNote=prev.lastNote;
+ state.matches=prev.matches;state.accepted=prev.accepted;editor.value=prev.text;
+ $("includeStyle").checked=prev.includeStyle;$("includeReview").checked=prev.includeReview;
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();
+ if(prev.resultVisible)render();
+ else {$("result").hidden=true;$("mistakes").textContent="—";}
+ toast("Последнее изменение отменено");
 };
 function applyOne(index,value){
  const result=Fix.confirm(state.checkedText,state.matches,state.accepted,index,value);
  if(!result)return;
- undoPush();
+ cancelCheck();undoPush();
  state.matches=result.matches;state.accepted=result.accepted;editor.value=result.text;
- resetPreviews();refreshMetrics();persistDraft();render();
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();render();
 }
 $("applyCorrected").onclick=()=>{
- const {text,applied}=selectedCorrections();if(!applied)return;
- undoPush();editor.value=text;state.checkedText=text;state.matches=[];state.accepted=[];
+ const result=selectedCorrections();if(!canTransfer(result))return;
+ cancelCheck();
+ // Card confirmations already changed the editor. Closing that result must
+ // not add a duplicate edit or an empty step before the user's real undo.
+ if(result.text!==editor.value){
+  undoPush();
+  editor.value=result.text;
+ }
+ state.checkedText=result.text;state.matches=[];state.accepted=[];
  $("includeReview").checked=false;
- resetPreviews();refreshMetrics();persistDraft();render();toast("Исправления перенесены в редактор");
+ resetPreviews();updateUndo();refreshMetrics();persistDraft();render();toast("Исправления перенесены в редактор");
 };
 async function copyText(text){
  try{
@@ -175,7 +216,7 @@ function checkNow(){
  .then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||"Проверка временно недоступна");return data})
  .then(data=>{
   if(seq!==state.requestId||editor.value!==text)return;
-  state.undo=[];state.checkedText=text;state.accepted=[];state.complete=Boolean(data.complete);
+  state.checkedText=text;state.comparisonText=text;state.accepted=[];state.complete=Boolean(data.complete);
   state.matches=C.filterDictionary(text,Fix.normalize(text,data.matches),state.words);
   state.lastNote=data.note||(!data.complete?"Сработала только ограниченная локальная проверка. Полный анализ недоступен.":"");
   $("includeReview").checked=false;$("includeStyle").checked=false;
@@ -183,7 +224,7 @@ function checkNow(){
  })
  .catch(err=>{
   if(seq!==state.requestId||editor.value!==text||err.name==="AbortError")return;
-  state.undo=[];state.checkedText=text;state.matches=[];state.accepted=[];state.lastNote="Не удалось проверить текст: "+err.message;
+  state.checkedText=text;state.comparisonText=text;state.matches=[];state.accepted=[];state.lastNote="Не удалось проверить текст: "+err.message;
   render();
  })
  .finally(()=>{
@@ -261,14 +302,22 @@ function renderTemplates(){
  }
 }
 let editorialDraft=null;
+const toneDescription=$("toneText").textContent;
+function resetTone(){
+ state.previewTone=null;$("toneApply").hidden=true;$("toneText").textContent=toneDescription;
+}
 function resetPreviews(){
  editorialDraft=null;$("editorialResult").hidden=true;
- state.previewTone=null;$("toneApply").hidden=true;
+ resetTone();
 }
+$("tone").onchange=resetTone;
 function renderEditorial(){
  const draft=editorialDraft;
  $("editorialText").textContent=draft.text;
  $("editorialApply").disabled=draft.text===draft.source;
+ $("editorialUndo").disabled=draft.undo.length===0;
+ $("editorial-count").textContent=draft.automaticCount+" авто · "+draft.accepted.length+" подтверждено";
+ compare(draft.source,draft.text,"editorialBeforeDiff","editorialAfterDiff");
  const options=$("editorialSuggestions");
  options.replaceChildren();
  options.hidden=draft.matches.length===0;
@@ -277,11 +326,13 @@ function renderEditorial(){
    if(draft.source!==editor.value)return;
    const result=Fix.confirm(draft.base,draft.matches,draft.accepted,index,value);
    if(!result)return;
+   draft.undo.push({text:draft.text,matches:draft.matches,accepted:draft.accepted});
+   if(draft.undo.length>20)draft.undo.shift();
    draft.text=result.text;draft.matches=result.matches;draft.accepted=result.accepted;
    renderEditorial();
    toast("Вариант добавлен в деловую редакцию");
   },()=>{
-   draft.matches=draft.matches.filter((_,i)=>i!==index);
+   skipMatch(draft,index);
    renderEditorial();
   }));
  }
@@ -289,7 +340,8 @@ function renderEditorial(){
 function previewEditorial(){
  if(!editor.value.trim()){toast("Сначала введи текст для редактуры");editor.focus();return}
  const source=editor.value,result=Business.polish(source);
- editorialDraft={source,base:result.text,text:result.text,matches:result.suggestions,accepted:[]};
+ editorialDraft={source,base:result.text,text:result.text,matches:result.suggestions,accepted:[],undo:[],
+  automaticCount:result.changes.reduce((total,change)=>total+change.count,0)};
  $("editorialChanges").textContent=result.changes.length?
    "Что изменено: "+result.changes.map(c=>c.label+(c.count>1?" ("+c.count+")":"")).join("; ")+".":"Автоматических правок нет.";
  const notes=$("editorialNotes");notes.replaceChildren();
@@ -301,6 +353,13 @@ function previewEditorial(){
  $("editorialResult").scrollIntoView({behavior:"smooth",block:"start"});
 }
 $("businessPolish").onclick=previewEditorial;
+$("editorialUndo").onclick=()=>{
+ const previous=editorialDraft?.undo.pop();
+ if(!previous)return;
+ Object.assign(editorialDraft,previous);
+ renderEditorial();
+ toast("Последний вариант отменён");
+};
 $("editorialCopy").onclick=async()=>{
  if(!editorialDraft||editorialDraft.source!==editor.value){toast("Сначала повтори редактуру актуального текста");return}
  const copied=await copyText(editorialDraft.text);toast(copied?"Деловой вариант скопирован":"Не удалось скопировать текст");
@@ -308,7 +367,7 @@ $("editorialCopy").onclick=async()=>{
 $("editorialApply").onclick=()=>{
  if(!editorialDraft||editorialDraft.source!==editor.value){toast("Текст изменился. Выполни редактуру ещё раз");return}
  if(editorialDraft.text===editor.value)return;
- replaceEditor(editorialDraft.text);
+ replaceEditor(editorialDraft.text,true);
  toast("Деловой вариант перенесён в редактор");
 };
 $("tonePreview").onclick=()=>{
@@ -318,7 +377,7 @@ $("tonePreview").onclick=()=>{
  $("toneText").textContent=state.previewTone===editor.value?"Для этого текста нет подходящих автоматических замен.":"Предварительный вариант: "+state.previewTone;
  $("toneApply").hidden=state.previewTone===editor.value;
 };
-$("toneApply").onclick=()=>{if(state.previewTone===null)return;replaceEditor(state.previewTone);toast("Формулировки применены")};
+$("toneApply").onclick=()=>{if(state.previewTone===null)return;replaceEditor(state.previewTone,true);toast("Формулировки применены")};
 let installPrompt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e});
 $("install").onclick=async()=>{

@@ -1,6 +1,6 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
-const {compose}=require("../corrections.js");
+const {compose,confirm}=require("../corrections.js");
 test("one-click corrected text and optional professional style",()=>{
  const text="Пришлите пожалуйста почты и я создам встречу";
  const issues=[
@@ -29,4 +29,14 @@ test("reviewOnly hints need explicit includeReview flag",()=>{
  const confirmed=compose(s,matches,false,true);
  assert.equal(confirmed.text,"Согласуем документ, который подготовили вчера");
  assert.equal(confirmed.reviewApplied,1);
+});
+
+test("composition reports confirmed edits separately from pending automatic edits",()=>{
+ const text="Привет";
+ const matches=[{offset:0,length:0,replacements:["«"],manualOnly:true}];
+ const result=confirm(text,matches,[],0,"«");
+ const preview=compose(text,result.matches,false,false,result.accepted);
+ assert.equal(preview.text,"«Привет");
+ assert.equal(preview.applied,0);
+ assert.equal(preview.confirmedApplied,1);
 });
