@@ -25,6 +25,7 @@ family("довереност","доверенност",["ь","и","ью","ей",
 family("опичат","опечат",["ка","ки","ке","ку","кой","ками","ок","ках"]);
 family("отсканирован","отсканированн",["ый","ая","ое","ые","ого","ому","ой","ую","ых","ыми"]);
 family("допалнительн","дополнительн",["ый","ая","ое","ые","ого","ому","ой","ую","ых","ыми"]);
+family("разщётн","расчётн",["ый","ая","ое","ые","ого","ому","ой","ую","ых","ыми"]);
 family("ответствен","ответственн",["ый","ая","ое","ые","ого","ому","ой","ую","ых","ыми"]);
 for(const [wrong,right] of Object.entries({
  отправте:"отправьте", оставте:"оставьте", поставте:"поставьте", исправте:"исправьте",
@@ -57,6 +58,9 @@ const pluralSubject=set("мы вы они");
 const pastSingular=set("отправил отправила подписал подписала получил получила согласовал согласовала утвердил утвердила подготовил подготовила направил направила перечислил перечислила приложил приложила");
 const pay=set("оплачу оплатишь оплатит оплатим оплатите оплатят оплатил оплатила оплатило оплатили оплатить");
 const payObject=set("услугу услуги доставку работы работу проезд подписку участие обучение проживание питание сбор комиссию");
+const payContinuation=set("до после по при через в на из курьеру картой наличными переводом");
+const closedSubjects=set("окна двери ворота шлюзы помещения");
+const shortPlural=new Map(Object.entries({закрыто:"закрыты",открыто:"открыты",опечатано:"опечатаны"}));
 const imperatives=set("пришли пришлите отправь отправьте перезвони перезвоните позвони позвоните приходи приходите напиши напишите сообщи сообщите подтверди подтвердите ответь ответьте передай передайте подожди подождите дай дайте");
 const firstNames=set("анна ольга мария ирина елена наталья татьяна саша маша миша сергей алексей иван дмитрий егор павел");
 const causes=set("заболел заболела заболели опоздал опоздала опоздали задержался задержалась задержались отменили отменил перенесли забыли забыл сломался сломалась закончился закончилась отказал отказала произошёл произошла отключили");
@@ -64,7 +68,7 @@ const causalPredicates=set("перенесли перенёс перенесла
 const gerunds=set("закончив завершив проверив получив изучив прочитав подписав согласовав");
 const gerundObjects=set("проверку работу документы документ письмо уведомление ответ отчёт отчет акт заявку материалы договор");
 const conditionVerb=set("сможешь сможете получится");
-const splitCause=set("не именно только лишь");
+const splitCause=set("не именно только лишь просто исключительно отчасти");
 const subject=set("я ты он она мы вы они");
 const infinitives=set("соблюсти сохранить согласовать проверить подтвердить оплатить отправить");
 const adjectiveForms=[
@@ -74,7 +78,35 @@ const adjectiveForms=[
 const nounGender=new Map(Object.entries({отчёт:0,отчет:0,договор:0,заявка:1,смета:1,письмо:2,решение:2,документы:3}));
 
 const types={spelling:"Орфография",grammar:"Грамматика",punctuation:"Пунктуация"};
-const tokenPattern=/https?:\/\/[^\s<>"«»]+|www\.[^\s<>"«»]+|[\p{L}\p{N}.+_-]{1,64}@[\p{L}\p{N}.+-]{1,253}|«[^»\r\n]*(?:»|(?=[\r\n]|$))|“[^”\r\n]*(?:”|(?=[\r\n]|$))|"[^"\r\n]*(?:"|(?=[\r\n]|$))|\x60[^\x60\r\n]*(?:\x60|(?=[\r\n]|$))|[#@][\p{L}\p{M}\p{N}_]+|[\p{L}\p{M}\p{N}_]+(?:[-‑][\p{L}\p{M}\p{N}_]+)*|[^\s]/gu;
+const tokenPattern=/(https?:\/\/[^\s<>"«»]+|www\.[^\s<>"«»]+|[\p{L}\p{N}.+_-]{1,64}@[\p{L}\p{N}.+-]{1,253}|«[^»\r\n]*(?:»|(?=[\r\n]|$))|“[^”\r\n]*(?:”|(?=[\r\n]|$))|"[^"\r\n]*(?:"|(?=[\r\n]|$))|\x60[^\x60\r\n]*(?:\x60|(?=[\r\n]|$))|(?<![\p{L}\p{N}])\x27[^\x27\r\n]*(?:\x27|(?=[\r\n]|$))|[#@][\p{L}\p{M}\p{N}_]+)|[\p{L}\p{M}\p{N}_]+(?:[-‑][\p{L}\p{M}\p{N}_]+)*|[^\s]/gu;
+
+// A marked field or legal form can introduce a literal name without quotes.
+const identifierPattern=/(?<![\p{L}\p{N}_])(?:ООО|ИП|ПАО|ОАО|ЗАО|АО|компания|организация|бренд|артикул|идентификатор|логин|псевдоним|метка|код(?:[ \t]+(?:заявки|платежа))?)(?:[ \t]+|[ \t]*:[ \t]*)([\p{L}\p{M}\p{N}_-]+)/giu;
+const nameTail=/^[ \t]+[А-ЯЁ][\p{L}\p{M}\p{N}_-]*/u;
+function editable(text,matches){
+ if(!matches.length)return matches;
+ const ranges=[];
+ for(const m of text.matchAll(tokenPattern))if(m[1])ranges.push([m.index,m.index+m[0].length]);
+ for(const m of text.matchAll(identifierPattern)){
+  let end=m.index+m[0].length;
+  let extra;
+  while((extra=nameTail.exec(text.slice(end))))end+=extra[0].length;
+  ranges.push([m.index+m[0].length-m[1].length,end]);
+ }
+ return matches.filter(match=>{
+  if(match.source!=="LanguageTool"&&["DOLYAMI","BRAND_DOLYAMI"].includes(match.ruleId)&&
+     /(?<![\p{L}\p{N}])сервис(?:а|ом|у)?[ \t]+$/iu.test(text.slice(Math.max(0,match.offset-25),match.offset)))return true;
+  return !ranges.some(([start,end])=>{
+   if(match.offset>=end||match.offset+match.length<=start)return false;
+   // The meeting heading formatter may carry a literal through verbatim.
+   if(match.source!=="LanguageTool"&&match.ruleId==="HEADINGS"&&start>=match.offset&&end<=match.offset+match.length){
+    const relative=start-match.offset;
+    return match.replacements[0]?.slice(relative,relative+end-start)!==text.slice(start,end);
+   }
+   return true;
+  });
+ });
+}
 
 function tokenize(text){
  return Array.from(text.matchAll(tokenPattern),match=>{
@@ -128,8 +160,10 @@ function suggest(text){
    const stem=word.endsWith("ла")?word.slice(0,-1):word;
    replace(token,stem+"и","grammar","RU_PAST_PLURAL","Согласуй сказуемое с подлежащим во множественном числе.");
   }
-  if(word==="за"&&pay.has(previous)&&payObject.has(next))
+  if(word==="за"&&pay.has(previous)&&payObject.has(next)&&(!adjacent(i+2)||payContinuation.has(key(i+2))))
    add(token.offset,tokens[i+1].end-token.offset,tokens[i+1].raw,"grammar","RU_PAY_OBJECT","Если речь об объекте оплаты, «оплатить» употребляется без «за».",true);
+  if(previous==="были"&&adjacent(i-1)&&closedSubjects.has(key(i-2))&&shortPlural.has(word))
+   replace(token,shortPlural.get(word),"grammar","RU_SHORT_PLURAL","Проверь число краткого причастия при подлежащем во множественном числе.",true);
   if(nounGender.has(word)&&previous){
    const forms=adjectiveForms.find(group=>group.includes(previous));
    if(forms&&forms[nounGender.get(word)]!==previous)replace(tokens[i-1],forms[nounGender.get(word)],
@@ -150,6 +184,7 @@ function suggest(text){
    // and constructions with a particle can split the conjunction instead.
    if(!splitCause.has(previous)&&previous){
     for(let j=i-1;j>=Math.max(0,i-4)&&adjacent(j+1)&&key(j);j--){
+     if(splitCause.has(key(j)))break;
      if(causalPredicates.has(key(j))){
       comma(tokens[i-1],"RU_CAUSE","Отдели придаточную часть причины запятой.");
       break;
@@ -166,7 +201,7 @@ function suggest(text){
  }
  return matches;
 }
-const api={suggest};
+const api={suggest,editable};
 if(typeof module!=="undefined"&&module.exports)module.exports=api;
 else root.YasnoRussian=api;
 })(typeof window!=="undefined"?window:{});

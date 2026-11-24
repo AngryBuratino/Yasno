@@ -74,7 +74,7 @@ test("browser script order and PWA cache include shared fallback, no OpenAI",()=
  const p=html.indexOf('src="/proofread-fallback.js"'),b=html.indexOf('src="/business-editor.js"');
  assert.ok(p>0&&b>p);
  assert.match(html,/3\.2 · без ИИ/u);
- assert.match(sw,/yasno-static-v37/u);
+ assert.match(sw,/yasno-static-v38/u);
  assert.ok(html.indexOf('src="/corrections.js"')<p);
  assert.match(sw,/proofread-fallback\.js/u);
  for(const file of ["api/check.js","business-editor.js","proofread-fallback.js"])

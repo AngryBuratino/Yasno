@@ -24,7 +24,7 @@
   {id:"BRANDS_ROBO",automatic:true,label:"Корректное написание названия",re:/(?<![\p{L}\p{N}])robokassa(?![\p{L}\p{N}])/giu,to:"Robokassa"},
   {id:"BRANDS_PRO",automatic:true,label:"Корректное написание названия",re:/(?<![\p{L}\p{N}])продамус(?![\p{L}\p{N}])/giu,to:"Prodamus"},
   {id:"BANKS",automatic:true,label:"Дефис в сложном существительном",re:/(?<![\p{L}\p{N}])банки[ \t]+эмитенты(?![\p{L}\p{N}])/giu,to:match=>match.replace(/[ \t]+/,"-")},
-  {id:"DOLYAMI",automatic:true,label:"Название сервиса с прописной буквы",re:/«долями»/giu,to:"«Долями»"}
+  {id:"DOLYAMI",automatic:true,label:"Название сервиса с прописной буквы",re:/(?<=сервис(?:а|ом|у)?[ \t]+)«долями»/giu,to:"«Долями»"}
  ];
  function polish(text,dictionary=[]){
   const original=String(text||"");
@@ -33,11 +33,16 @@
   const changes=[],notes=[],suggestions=[];
   if(base.applied)changes.push({id:"BASE",label:"Исправлены очевидные ошибки орфографии и пунктуации",count:base.applied});
   function candidates(re,withText,id,label,manualOnly=true){
-   return Array.from(output.matchAll(re),match=>({
+   return Shared.editable(output,Array.from(output.matchAll(re),match=>({
     offset:match.index,length:match[0].length,original:match[0],
     replacements:[typeof withText==="function"?withText(...match):withText],
     ruleId:id,message:label,manualOnly
-   }));
+   }))).filter(match=>{
+    const following=output.slice(match.offset+match.length,match.offset+match.length+100);
+    if(id==="EMAIL_TONE")return !/^\.[ \t]*Речь о бумажн/iu.test(following);
+    if(id==="SCHEDULE")return !/^\.[ \t]*(?:Только созвон|Только звонок)/iu.test(following);
+    return true;
+   });
   }
   function swap(re,withText,id,label){
    const result=Fix.compose(output,candidates(re,withText,id,label,false));

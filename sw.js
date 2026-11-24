@@ -1,5 +1,5 @@
 /* Cache immutable versions of the app shell. User data stays out of Cache Storage. */
-const CACHE="yasno-static-v37";
+const CACHE="yasno-static-v38";
 const ASSETS=new Set([
  "/index.html","/styles.css","/app-core.js","/russian-language.js","/proofread-fallback.js","/business-editor.js",
  "/advanced-punctuation.js","/local-check.js","/app.js","/corrections.js","/icon.svg","/manifest.webmanifest"

@@ -36,13 +36,13 @@
   add(/(^|\n)([ \t]*(?:Все|Всё|все|всё)[ \t]+так[ \t]+же[ \t]+нужна[ \t]+почта)([ \t]*)(?=\r?$)/gmu,
    m=>make(m.index+m[1].length+m[2].length,0,".","punctuation",
     "В конце законченного предложения нужна точка.","EMAIL_PERIOD"));
-  return matches.sort((a,b)=>a.offset-b.offset||b.length-a.length);
+  return Russian.editable(text,matches).sort((a,b)=>a.offset-b.offset||b.length-a.length);
  }
  const Fix=typeof module!=="undefined"&&module.exports?require("./corrections.js"):root.YasnoCorrections;
  function apply(text,matches){
   return Fix.compose(text,matches).text;
  }
- const api={suggest,apply};
+ const api={suggest,apply,editable:Russian.editable};
  if(typeof module!=="undefined"&&module.exports)module.exports=api;
  root.YasnoFallback=api;
 })(typeof window!=="undefined"?window:{});
