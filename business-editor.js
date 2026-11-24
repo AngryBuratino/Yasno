@@ -1,6 +1,9 @@
-/* Ясно 3.1: объяснимая редактура без генеративного ИИ и скрытых допущений. */
+/* Ясно 3.2: объяснимая редактура без генеративного ИИ и скрытых допущений. */
 (function(root){"use strict";
+ const Shared=typeof module!=="undefined"&&module.exports?require("./proofread-fallback.js"):root.YasnoFallback;
  const rules=[
+  {id:"MEETING_TONE",label:"Убрана разговорная формулировка о встрече",re:/Создал[ \t]+нам[ \t]+встречу(?=[ \t]+на[ \t]+сегодня[ \t]+в[ \t]+\d{1,2}:\d{2})/gu,to:"Назначил встречу"},
+  {id:"EMAIL_TONE",label:"Уточнён запрос адреса электронной почты",re:/Всё[ \t]+так[ \t]+же[ \t]+нужна[ \t]+почта(?=[.!?\n]|$)/giu,to:"По-прежнему нужен адрес электронной почты"},
   // Раздельные независимые действия лучше читать отдельными предложениями.
   {id:"STEPS",label:"Этапы разделены на предложения",re:/(направлю вам на этой неделе),[ \t]+(необходимо будет)/giu,to:(_m,part)=>part+". Предварительно необходимо будет"},
   {id:"CALC",label:"Уточнено действие без добавления новых фактов",re:/рассчитать[ \t]+и[ \t]+посмотреть/giu,to:"провести расчёты и проанализировать"},
@@ -22,7 +25,8 @@
   {id:"DOLYAMI",label:"Название сервиса с прописной буквы",re:/«долями»/giu,to:"«Долями»"}
  ];
  function polish(text){
-  const original=String(text||"");let output=original;const changes=[],notes=[];
+  const original=String(text||"");let output=Shared.apply(original,Shared.suggest(original));const changes=[],notes=[];
+  if(output!==original)changes.push({id:"BASE",label:"Исправлены очевидные ошибки орфографии и пунктуации",count:Shared.suggest(original).length});
   function swap(re,withText,id,label){
    let count=0;output=output.replace(re,(match,...args)=>{
      const repl=typeof withText==="function"?withText(match,...args):withText;
@@ -45,8 +49,11 @@
     (_m,noun,_space1,_space2,services,space3)=>noun+", такие как "+services+","+space3,
     "SUCH_AS","Перечисление «такие как» выделено запятыми");
   for(const rule of rules)swap(rule.re,rule.to,rule.id,rule.label);
+  if(/(?:Создал|Назначил)[ \t]+(?:нам[ \t]+)?встречу[ \t]+на[ \t]+сегодня/iu.test(original))
+   swap(/Подскажите,[ \t]+всё[ \t]+в[ \t]+силе\?/giu,"Подскажите, встреча остаётся в силе?","STATUS","Уточнён вопрос о статусе встречи");
   // Однотипные окончания заголовков («Проникновение – ...») не преобразуются,
   // если трудно отличить заголовок от обычного предложения.
+  if(/вс[её][ \t]+так[ \t]+же[ \t]+нужна[ \t]+почта/iu.test(original))notes.push("Проверь смысл: под «почтой» подразумевается адрес электронной почты, а не почтовая корреспонденция.");
   if(/(?<![\p{L}\p{N}])проникновение(?![\p{L}\p{N}])/iu.test(original))notes.push("Уточни термин «проникновение»: речь о доле платежей, обороте или подключениях? Без этого редактор не меняет смысл пункта.");
   if(/(?<![\p{L}\p{N}])рассчитать[ \t]+и[ \t]+посмотреть(?![\p{L}\p{N}])/iu.test(original))notes.push("Уточни, что именно необходимо рассчитать. Формулировка «рассчитать и посмотреть банки-эмитенты» неоднозначна.");
   if(/(?<![\p{L}\p{N}])из-за частых проверок(?![\p{L}\p{N}])/iu.test(original))notes.push("Проверь формулировку о перечне документов: неясно, согласован ли он вследствие проверок или просто не меняется.");
