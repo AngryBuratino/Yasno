@@ -1,11 +1,11 @@
 /* Ясно 3.1: интерфейс, полностью без ИИ. */
 (()=>{"use strict";
 const $=id=>document.getElementById(id);
-const C=window.YasnoCore,Fix=window.YasnoCorrections,Business=window.YasnoBusiness;
+const C=window.YasnoCore,Fix=window.YasnoCorrections,Business=window.YasnoBusiness,Local=window.YasnoLocalCheck;
 if(!C||!Fix||!Business){document.body.dataset.error="modules";return;}
 const editor=$("editor");
-const state={checkedText:"",comparisonText:"",matches:[],accepted:[],filter:"all",lastNote:"",complete:false,requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
-const keys={dictionary:"yasno:dictionary:3",history:"yasno:history:3",draft:"yasno:draft:3",draftOn:"yasno:draft-enabled:3",theme:"yasno:theme:3"};
+const state={checkedText:"",comparisonText:"",matches:[],accepted:[],filter:"all",lastNote:"",requestId:0,controller:null,undo:[],words:[],history:[],draftOn:false,previewTone:null};
+const keys={dictionary:"yasno:dictionary:3",history:"yasno:history:3",draft:"yasno:draft:3",draftOn:"yasno:draft-enabled:3",theme:"yasno:theme:3",updateDraft:"yasno:update-draft:1"};
 const get=(k,fallback)=>{try{const s=localStorage.getItem(k);return s===null?fallback:JSON.parse(s)}catch{return fallback}};
 const save=(k,x)=>{try{localStorage.setItem(k,JSON.stringify(x));return true}catch{toast("Не удалось сохранить данные в этом браузере");return false}};
 const erase=k=>{try{localStorage.removeItem(k)}catch{}};
@@ -143,7 +143,7 @@ function render(){
  renderCorrected();renderIssues();
  const note=$("checkNotice");note.replaceChildren();
  if(state.lastNote){const p=document.createElement("div");p.className="notice";p.textContent=state.lastNote;note.appendChild(p)}
- else if(!state.matches.length){const p=document.createElement("div");p.className="notice ok";p.textContent="Явных ошибок не найдено. Это не гарантия идеальной пунктуации.";note.appendChild(p)}
+
  if(state.matches.some(m=>Fix.needsConfirmation(m)&&m.replacements.length)){
   const p=document.createElement("div");p.className="notice";
   p.textContent="Спорные замены можно добавить только по одной в карточках замечаний.";
@@ -215,30 +215,93 @@ function normalizeApiMatches(text,matches){
   return {...match,replacements:match.replacements.map(value=>typeof value==="string"?value.replace(/\r\n?/g,"\n"):value)};
  }));
 }
-function checkNow(){
- if(!editor.value.trim()){editor.focus();toast("Сначала введи текст");return}
- state.controller?.abort();
+const checkMessages={
+ partial:"Проверка завершена с ограничениями. Часть подсказок недоступна.",
+ local:"Выполнена ограниченная локальная проверка.",
+ error:"Не удалось выполнить проверку. Попробуй ещё раз."
+};
+const localReasons={
+ offline:"Нет подключения к интернету.",
+ api_unavailable:"Сервис проверки временно недоступен.",
+ rate_limited:"Проверка временно ограничена. Попробуй позже.",
+ upstream_error:"LanguageTool временно недоступен.",
+ network:"LanguageTool временно недоступен.",
+ timeout:"LanguageTool не ответил вовремя.",
+ invalid_response:"LanguageTool временно недоступен."
+};
+let retryAt=0;
+
+function limitedCheck({text,...options},reason){
+ try{
+  return {coverage:"local",reason,...Local.select(text,Local.candidates(text,options))};
+ }catch{
+  return {coverage:"error",matches:[]};
+ }
+}
+
+function postponeChecks(seconds){
+ const delay=Number.isInteger(seconds)&&seconds>0?Math.min(seconds,3600):30;
+ retryAt=Date.now()+delay*1000;
+}
+
+async function requestCheck(parameters,controller){
+ if(!navigator.onLine)return limitedCheck(parameters,"offline");
+ if(Date.now()<retryAt)return limitedCheck(parameters,"rate_limited");
+
+ const timer=setTimeout(()=>controller.abort(),8000);
+ try{
+  const response=await fetch("/api/check",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify(parameters),signal:controller.signal});
+  if(response.status===429){
+   postponeChecks(Number(response.headers.get("Retry-After")));
+   return limitedCheck(parameters,"rate_limited");
+  }
+  if(response.status>=500)return limitedCheck(parameters,"api_unavailable");
+  if(!response.ok)return {coverage:"error",matches:[]};
+  const data=await response.json();
+  // A previously deployed API reports only complete. Accept it while the
+  // browser shell and the server are on different releases.
+  const coverage=data?.coverage??(typeof data?.complete==="boolean"?(data.complete?"full":"local"):null);
+  if(!Array.isArray(data?.matches)||!["full","partial","local","error"].includes(coverage)){
+   return limitedCheck(parameters,"api_unavailable");
+  }
+  if(data.reason==="rate_limited")postponeChecks(data.retryAfter);
+  return {...data,coverage};
+ }catch{
+  return limitedCheck(parameters,"api_unavailable");
+ }finally{
+  clearTimeout(timer);
+ }
+}
+
+function checkNote(data,matches){
+ if(data.coverage==="full"){
+  if(data.truncated)return "Полная проверка завершена. Показано до 100 подсказок.";
+  return matches.length?"Полная проверка завершена.":"Полная проверка завершена. Явных ошибок не найдено.";
+ }
+ const reason=data.coverage==="local"&&Object.hasOwn(localReasons,data.reason)?localReasons[data.reason]:"";
+ return [reason,checkMessages[data.coverage],data.truncated?"Показано до 100 подсказок.":""].filter(Boolean).join(" ");
+}
+
+async function checkNow(){
+ if(state.controller)return;
+ const text=editor.value;
+ if(!text.trim()){editor.focus();toast("Сначала введи текст");return}
+ if(text.length>C.MAX_TEXT){toast("Проверь текст по частям. Лимит — 10 000 символов.");return}
  const controller=new AbortController(),seq=++state.requestId;state.controller=controller;
  const check=$("check");check.disabled=true;check.innerHTML='<span class="spinner"></span> Проверяем...';
- const text=editor.value,parameters={text,individualReview:true,businessMode:$("businessMode").checked,deepCheck:$("deepCheck").checked};
- fetch("/api/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(parameters),signal:controller.signal})
- .then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||"Проверка временно недоступна");return data})
- .then(data=>{
+ const parameters={text,individualReview:true,businessMode:$("businessMode").checked,deepCheck:$("deepCheck").checked};
+ try{
+  const data=await requestCheck(parameters,controller);
   if(seq!==state.requestId||editor.value!==text)return;
-  state.checkedText=text;state.comparisonText=text;state.accepted=[];state.complete=Boolean(data.complete);
+  state.checkedText=text;state.comparisonText=text;state.accepted=[];
   state.matches=C.filterDictionary(text,normalizeApiMatches(text,data.matches),state.words);
-  state.lastNote=data.note||(!data.complete?"Сработала только ограниченная локальная проверка. Полный анализ недоступен.":"");
+  state.lastNote=checkNote(data,state.matches);
   $("includeReview").checked=false;$("includeStyle").checked=false;
   render();$("result").scrollIntoView({behavior:"smooth",block:"start"});
- })
- .catch(err=>{
-  if(seq!==state.requestId||editor.value!==text||err.name==="AbortError")return;
-  state.checkedText=text;state.comparisonText=text;state.matches=[];state.accepted=[];state.lastNote="Не удалось проверить текст: "+err.message;
-  render();
- })
- .finally(()=>{
+ }finally{
   if(seq===state.requestId){check.disabled=false;check.textContent="✦ Проверить текст";state.controller=null}
- });
+ }
 }
 $("check").onclick=checkNow;
 editor.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();checkNow()}});
@@ -292,7 +355,15 @@ $("clearHistory").onclick=()=>{
  state.history=[];erase(keys.history);renderHistory();toast("История удалена");
 };
 const drafts=$("draftMode");state.draftOn=get(keys.draftOn,false)===true;drafts.checked=state.draftOn;
-if(state.draftOn){const savedDraft=get(keys.draft,"");if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft}
+let updateDraft=null;
+try{
+ updateDraft=sessionStorage.getItem(keys.updateDraft);
+ sessionStorage.removeItem(keys.updateDraft);
+}catch{}
+if(state.draftOn){
+ const savedDraft=updateDraft??get(keys.draft,"");
+ if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft;
+}
 drafts.onchange=()=>{
  state.draftOn=drafts.checked;save(keys.draftOn,state.draftOn);
  if(state.draftOn){persistDraft();toast("Черновик сохраняется только на этом устройстве")}
@@ -393,7 +464,49 @@ $("install").onclick=async()=>{
  if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null}
  else toast("На телефоне: меню браузера → «Добавить на главный экран»");
 };
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+async function registerPwa(){
+ const worker=navigator.serviceWorker;
+ const registration=await worker.register("/sw.js",{updateViaCache:"none"});
+ const showUpdate=()=>{
+  if(worker.controller&&registration.waiting)$("updateBanner").hidden=false;
+ };
+ const watchUpdate=()=>registration.installing?.addEventListener("statechange",showUpdate);
+ registration.addEventListener("updatefound",watchUpdate);
+ watchUpdate();
+ showUpdate();
+ let requested=false;
+ $("applyUpdate").onclick=()=>{
+  if(editor.value&&!state.draftOn){
+   $("updateText").textContent="Включи автосохранение черновика или скопируй текст перед очисткой поля.";
+   return;
+  }
+  if(requested||!registration.waiting)return;
+  requested=true;
+  $("applyUpdate").disabled=true;
+  registration.waiting.postMessage("ACTIVATE_UPDATE");
+ };
+ worker.addEventListener("controllerchange",()=>{
+  if(!requested){
+   $("updateBanner").hidden=true;
+   return;
+  }
+  requested=false;
+  if(editor.value){
+   if(state.draftOn&&get(keys.draftOn,false)===true){
+    try{
+     // Per-tab storage prevents a concurrent tab from replacing this draft.
+     sessionStorage.setItem(keys.updateDraft,editor.value);
+     location.reload();
+     return;
+    }catch{}
+   }
+   $("updateText").textContent="Новая версия откроется при следующей загрузке страницы.";
+   return;
+  }
+  location.reload();
+ });
+}
+if("serviceWorker" in navigator)window.addEventListener("load",()=>registerPwa().catch(()=>{}));
 state.words=get(keys.dictionary,[]);if(!Array.isArray(state.words))state.words=[];
 state.words=state.words.filter(C.validDictionaryWord).slice(0,80);
 state.history=get(keys.history,[]);if(!Array.isArray(state.history))state.history=[];

@@ -1,119 +1,49 @@
-// Ясно 3.2 — проверка через LanguageTool и осторожные локальные правила.
-// Текст не записывается в базу данных или логи приложения.
-const {reviewSuggestions}=require("../advanced-punctuation.js");
-const {suggest:sharedSuggestions}=require("../proofread-fallback.js");
-const {normalize,needsConfirmation}=require("../corrections.js");
-const labels={punctuation:"Пунктуация",spelling:"Орфография",grammar:"Грамматика",style:"Совет по стилю"};
-const item=(offset,length,replacement,type,message,ruleId)=>({offset,length,message,replacements:[replacement],type,category:labels[type],ruleId});
-const manual=match=>({...match,manualOnly:true});
-function localMatches(text,businessMode=false){
- const out=[];
- const add=(re,fn)=>{for(const m of text.matchAll(re)){const v=fn(m);if(v)out.push(v)}};
- const swap=(re,repl,type,msg,id)=>add(re,m=>item(m.index,m[0].length,repl(m[0]),type,msg,id));
- swap(/на этой недели/giu,s=>s[0]===s[0].toUpperCase()?"На этой неделе":"на этой неделе","grammar","Правильно: «на этой неделе» (предложный падеж).","LOCAL_WEEK");
- swap(/тоже самое/giu,s=>s[0]===s[0].toUpperCase()?"То же самое":"то же самое","spelling","В выражении «то же самое» частица «же» пишется отдельно.","LOCAL_SAME");
- swap(/удалось[ \t]+познакомится/giu,s=>s.replace(/познакомится/iu,"познакомиться"),"grammar","После «удалось» требуется инфинитив «познакомиться».","LOCAL_MEET");
- swap(/треннинги/giu,s=>s[0]===s[0].toUpperCase()?"Тренинги":"тренинги","spelling","«Тренинги» пишется с одной «н» после «е».","LOCAL_TRAINING");
- swap(/интернет[ \t]+эквайринг[а-яё]*/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Интернет-эквайринг» пишется через дефис.","LOCAL_INTERNET");
- swap(/онлайн[ \t]+встреч[а-яё]*/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Онлайн-встреча» пишется через дефис.","LOCAL_ONLINE");
- // Правила для распространённых ошибок в деловых итогах.
- swap(/(?<![\p{L}\p{N}])банки[ \t]+эмитенты(?![\p{L}\p{N}])/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Банки-эмитенты» пишется через дефис.","BANKS_ISSUERS");
- add(/([А-Яа-яЁё0-9])([ \t]+)(т[ \t]*\.[ \t]*к\.?)(?=[ \t]+[А-Яа-яЁё])/giu,
-  m=>item(m.index+m[1].length,m[2].length+m[3].length,", так как","punctuation",
-  "Перед придаточной частью с «так как» нужна запятая; в деловом письме лучше писать союз полностью.","BECAUSE_ABBR"));
- swap(/,[ \t]+т[ \t]*\.[ \t]*к\.?(?=[ \t]+[А-Яа-яЁё])/giu,s=>s.replace(/т[ \t]*\.[ \t]*к\.?/iu,"так как"),"grammar","Лучше писать полный союз «так как».","BECAUSE_ALREADY_COMMA");
- const suchAs=/(?<![\p{L}\p{N}])(сервисы|решения|инструменты|платформы|продукты|способы)([ \t]+)такие как([ \t]+)([\p{L}\p{N}-]+[ \t]+и[ \t]+[\p{L}\p{N}-]+)([ \t]+)(?=(?:помогают|позволяют|работают|поддерживают|доступны|используются)(?![\p{L}\p{N}]))/giu;
- add(suchAs,m=>item(m.index+m[1].length,0,",","punctuation","Поставь запятую перед обособленным оборотом «такие как».","SUCH_AS_OPEN"));
- add(suchAs,m=>item(m.index+m[0].length-m[5].length,0,",","punctuation","После перечня примеров нужна закрывающая запятая.","SUCH_AS_CLOSE"));
- const please="«Пожалуйста» — вводное слово, в просьбах обычно выделяется запятыми.";
- add(/([А-Яа-яЁё])([ \t]+)(пожалуйста)([ \t]+)(?=[А-Яа-яЁё])/giu,m=>item(m.index+m[1].length,m[2].length+m[3].length+m[4].length,", пожалуйста, ","punctuation",please,"LOCAL_PLEASE_BOTH"));
- add(/,[ \t]+(пожалуйста)([ \t]+)(?=[А-Яа-яЁё])/giu,m=>item(m.index+m[0].indexOf(m[1]),m[1].length,m[1]+",","punctuation",please,"LOCAL_PLEASE_RIGHT"));
- add(/([А-Яа-яЁё])([ \t]+)(пожалуйста)(?=[ \t]*,)/giu,m=>item(m.index+m[1].length,m[2].length,", ","punctuation",please,"LOCAL_PLEASE_LEFT"));
- add(/(^|[.!?][ \t]+)(Пожалуйста)([ \t]+)(?=[А-Яа-яЁё])/gimu,m=>item(m.index+m[1].length,m[2].length,m[2]+",","punctuation",please,"LOCAL_PLEASE_START"));
- add(/(^|[\n.!?][ \t]*)(Коллеги)([ \t]+)(привет|добрый день)(?=$|[ \t!.,])/gimu,m=>item(m.index+m[1].length+m[2].length,0,",","punctuation","После обращения «коллеги» нужна запятая.","LOCAL_COLLEAGUES"));
- add(/([А-Яа-яЁё])([ \t]+)(а|но)(?=[ \t]+[А-Яа-яЁё])/giu,m=>manual(item(m.index+m[1].length,0,",","punctuation","Если «а» или «но» соединяет части предложения, проверь запятую.","LOCAL_BUT")));
- add(/([А-Яа-яЁё])([ \t]+)(и я[ \t]+(?:создам|отправлю|проверю|посмотрю|назначу|организую|подготовлю|сверюсь))(?=$|[ \t.,!?])/giu,m=>item(m.index+m[1].length,0,",","punctuation","«И» соединяет две части предложения с разными грамматическими основами.","LOCAL_AND_I"));
- add(/(встречи)([ \t]+)(на которых)(?=[ \t]+[А-Яа-яЁё])/giu,m=>item(m.index+m[1].length,0,",","punctuation","Придаточная часть «на которых ...» отделяется запятой.","LOCAL_RELATIVE"));
- if(businessMode){
-   add(/(?<![\p{L}])robokassa(?![\p{L}])/giu,m=>m[0]==="Robokassa"?null:item(m.index,m[0].length,"Robokassa","spelling","Написание названия сервиса — Robokassa.","BRAND_ROBOKASSA"));
-   add(/(?<![\p{L}])продамус(?![\p{L}])/giu,m=>m[0]==="Prodamus"?null:item(m.index,m[0].length,"Prodamus","spelling","Написание названия сервиса — Prodamus.","BRAND_PRODAMUS"));
-   add(/«долями»/giu,m=>m[0]==="«Долями»"?null:item(m.index,m[0].length,"«Долями»","spelling","В названии сервиса «Долями» первая буква прописная.","BRAND_DOLYAMI"));
-   add(/почты(?![А-Яа-яЁё])/giu,m=>{
-     const before=text.slice(Math.max(0,m.index-90),m.index).split(/[.!?\n]/).pop();
-     if(/электронной[ \t]+$/iu.test(before))return null;
-     return /(?:пришлите|напишите|отправьте|укажите)/iu.test(before)
-       ?item(m.index,m[0].length,"адреса электронной почты","style","В деловом письме «адреса электронной почты» звучит точнее, чем «почты».","BUSINESS_EMAIL"):null;
-   });
-   swap(/создам встречу/giu,()=> "отправлю приглашение на встречу","style","Если речь о календарном приглашении, можно уточнить: «отправлю приглашение на встречу». Это необязательная рекомендация.","BUSINESS_MEETING");
-   swap(/день и время удобное/giu,()=> "удобные для вас день и время","style","Такой порядок слов звучит естественнее в деловом сообщении.","BUSINESS_TIME");
-   swap(/посмотрю по календарю/giu,()=> "сверюсь с календарём","style","Краткая нейтральная формулировка для рабочей переписки.","BUSINESS_CALENDAR");
-   swap(/скиньте/giu,s=>s[0]===s[0].toUpperCase()?"Пришлите":"пришлите","style","Для делового письма лучше нейтральное «пришлите».","BUSINESS_SEND");
-   add(/собрать[ \t]+ОС(?=$|[ \t,.:;!?])/gu,m=>item(m.index+m[0].lastIndexOf("ОС"),2,"обратную связь","style","Если «ОС» означает обратную связь, полная формулировка понятнее.","BUSINESS_FEEDBACK"));
- }
- return [...out.map(match=>match.type==="style"?manual(match):match),...sharedSuggestions(text)];
-}
-function kind(m){
- const s=((m.rule?.category?.id||"")+" "+(m.rule?.issueType||"")+" "+(m.rule?.id||"")).toUpperCase();
- if(/PUNCT|COMMA|COLON|DASH/.test(s))return "punctuation";
- if(/MISSPELL|SPELL|TYPOGRAPH|CASING|TYPOS/.test(s))return "spelling";
- if(/STYLE|REDUNDAN|WORDINESS/.test(s))return "style";
- return "grammar";
-}
-function merge(remote,local,text){
- const candidates=normalize(text,[...local,...remote]);
- const priority=match=>!match.replacements.length?3:needsConfirmation(match)?2:match.reviewOnly?1:0;
- // Reserve the limited response first for applicable local rules. Competing
- // candidates stay available for individual review without suppressing them.
- return candidates.sort((a,b)=>priority(a)-priority(b)||a.offset-b.offset)
-  .slice(0,100).sort((a,b)=>a.offset-b.offset);
-}
+// The editor never stores request text. Origin only protects browser requests.
+const Local=require("../local-check.js");
+const {needsConfirmation}=require("../corrections.js");
+const {checkLanguageTool}=require("../server/languagetool.js");
+
+const MAX_BODY_BYTES=64*1024;
+
 module.exports=async function handler(req,res){
- res.setHeader("Cache-Control","no-store");res.setHeader("X-Content-Type-Options","nosniff");
- if(req.method!=="POST")return res.status(405).json({error:"Метод не поддерживается"});
+ res.setHeader("Cache-Control","no-store");
+ res.setHeader("X-Content-Type-Options","nosniff");
+ const fail=(status,error)=>res.status(status).json({coverage:"error",complete:false,error});
+ if(req.method!=="POST")return fail(405,"Метод не поддерживается");
  const origin=req.headers.origin;
- if(origin){try{if(new URL(origin).host!==req.headers.host)return res.status(403).json({error:"Запрос запрещён"});}
- catch{return res.status(403).json({error:"Некорректный запрос"});}}
- let body=req.body;
- if(typeof body==="string"){try{body=JSON.parse(body)}catch{body={}}}
- const text=typeof body?.text==="string"?body.text:"";
- if(!text.trim()||text.length>10000)return res.status(400).json({error:"Введите текст до 10 000 символов."});
- const businessMode=body?.businessMode===true;
- const deepCheck=body?.deepCheck===true;
- async function checkLT(){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),6000);
+ if(origin){
   try{
-   const result=await fetch("https://api.languagetool.org/v2/check",{
-    method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},
-    body:new URLSearchParams({text,language:"ru"}),signal:controller.signal
-   });
-   if(!result.ok)throw Error("LanguageTool "+result.status);
-   const data=await result.json();
-   if(!Array.isArray(data?.matches))return {complete:false,matches:[]};
-   const matches=data.matches.filter(m=>m&&typeof m==="object").map(m=>{
-    const type=kind(m);
-    const variants=Array.isArray(m.replacements)?m.replacements:[];
-    return manual({offset:m.offset,length:m.length,message:String(m.message||"Проверь это место").slice(0,400),
-      replacements:variants.map(x=>x?.value).filter(value=>typeof value==="string"&&value.length<=120).slice(0,4),
-      type,category:labels[type],ruleId:String(m.rule?.id||""),source:"LanguageTool"});
-   });
-   return {complete:true,matches};
-  }catch{return {complete:false,matches:[]};}
-  finally{clearTimeout(timer);}
+   if(new URL(origin).host!==req.headers.host)return fail(403,"Запрос запрещён");
+  }catch{return fail(403,"Некорректный запрос");}
  }
- const lt=await checkLT();
- const base=localMatches(text,businessMode);
- const advanced=deepCheck?reviewSuggestions(text):[];
- const matches=merge(lt.matches,[...base,...advanced],text);
- const all=body?.individualReview===true?matches:matches.map(match=>
+ let body=req.body;
+ if(Number(req.headers["content-length"])>MAX_BODY_BYTES||
+    typeof body==="string"&&Buffer.byteLength(body)>MAX_BODY_BYTES)return fail(413,"Запрос слишком большой.");
+ if(typeof body==="string"){
+  try{body=JSON.parse(body)}catch{return fail(400,"Некорректный запрос.")}
+ }
+ const text=typeof body?.text==="string"?body.text:"";
+ if(!text.trim()||text.length>10000)return fail(400,"Введите текст до 10 000 символов.");
+ const options={businessMode:body.businessMode===true,deepCheck:body.deepCheck===true};
+ const local=Local.candidates(text,options);
+ const provider=await checkLanguageTool(text);
+ const {coverage,reason,retryAfter}=provider;
+ const {matches,truncated}=Local.select(text,[...local,...provider.matches]);
+ // An older shell has no per-suggestion confirmation. Its response keeps
+ // advisory cards and withholds the replacement values for those cards.
+ const all=body.individualReview===true?matches:matches.map(match=>
   needsConfirmation(match)?{...match,replacements:[]}:match);
- const reviewCount=all.filter(x=>x.reviewOnly).length;
  const notes=[];
- if(!lt.complete)notes.push("LanguageTool временно недоступен. Проверка ограничена локальными правилами.");
+ if(coverage==="local")notes.push("LanguageTool временно недоступен. Выполнена ограниченная локальная проверка.");
+ if(coverage==="partial")notes.push("Проверка завершена с ограничениями. Часть подсказок LanguageTool недоступна.");
+ if(truncated)notes.push("Показано до 100 подсказок. Для полной выдачи проверьте текст по частям.");
  return res.status(200).json({
-   matches:all,complete:lt.complete,reviewCount,deepCheck,engine:"rules-language-tool",
-   note:notes.join(" "),mode:businessMode?"business":"standard"
+  coverage,reason,retryAfter,truncated,matches:all,complete:coverage==="full",
+  reviewCount:all.filter(match=>match.reviewOnly).length,
+  deepCheck:options.deepCheck,engine:"rules-language-tool",note:notes.join(" "),
+  mode:options.businessMode?"business":"standard"
  });
 };
-module.exports.localMatches=localMatches;
-module.exports.mergeMatches=merge;
+
+module.exports.localMatches=Local.localMatches;
+module.exports.mergeMatches=(remote,local,text)=>Local.select(text,[...local,...remote]).matches;
