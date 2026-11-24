@@ -58,7 +58,9 @@ function localMatches(text,businessMode=false){
 
 function candidates(text,{businessMode=false,deepCheck=false}={}){
  const base=localMatches(text,businessMode);
- return deepCheck?[...base,...advanced.reviewSuggestions(text)]:base;
+ if(!deepCheck)return base;
+ const insertions=new Set(base.filter(match=>match.length===0&&match.replacements[0]===",").map(match=>match.offset));
+ return [...base,...advanced.reviewSuggestions(text).filter(match=>!insertions.has(match.offset))];
 }
 
 function select(text,matches){

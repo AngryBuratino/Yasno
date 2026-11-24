@@ -1,12 +1,13 @@
 /* Ясно 3.2 — общие осторожные правила для браузера и API. Без ИИ. */
 (function(root){"use strict";
+ const Russian=typeof module!=="undefined"&&module.exports?require("./russian-language.js"):root.YasnoRussian;
  const types={spelling:"Орфография",punctuation:"Пунктуация",grammar:"Грамматика",style:"Совет по стилю"};
  function make(offset,length,replacement,type,message,id){
   return {offset,length,replacements:[replacement],type,category:types[type]||"Замечание",message,ruleId:id,source:"local"};
  }
  function suggest(text){
   text=String(text||"");
-  const matches=[];
+  const matches=Russian.suggest(text);
   function add(regex,handler){
    for(const m of text.matchAll(regex)){
     const v=handler(m);
