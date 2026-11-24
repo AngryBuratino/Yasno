@@ -253,3 +253,42 @@ for (const width of widths) {
   });
  });
 }
+
+test("transferring a replacement with CRLF settles the textarea result", async()=>{
+ const original="Строка.";
+ await withPage(390,()=>[edit(0,original.length,"Первая\r\nВторая.")],async(page,editor,check)=>{
+  await editor.fill(original);
+  await check();
+  await click(page,"applyCorrected");
+  const expected="Первая\nВторая.";
+  assert.equal(await editor.inputValue(),expected);
+  assert.equal(await page.locator("#applyCorrected").isDisabled(),true);
+  assert.equal(await read(page,"correctedText"),expected);
+  await click(page,"undo");
+  assert.equal(await editor.inputValue(),original);
+ });
+});
+
+test("an expanding correction survives reloading a draft or saved result",async()=>{
+ const original="а".repeat(9999)+".";
+ await withPage(390,()=>[edit(9999,1,"!!!")],async(page,editor,check)=>{
+  await click(page,"settings");
+  await page.locator("#draftMode").check();
+  await editor.fill(original);
+  await check();
+  await click(page,"applyCorrected");
+  const expected=original.slice(0,-1)+"!!!";
+  assert.equal(await editor.inputValue(),expected);
+  await click(page,"saveResult");
+  await page.reload();
+  assert.equal(await editor.inputValue(),expected);
+  assert.equal(await page.locator("#historyList .saved").count(),1);
+  await click(page,"settings");
+  await page.locator("#draftMode").uncheck();
+  await page.reload();
+  assert.equal(await editor.inputValue(),"");
+  await click(page,"historySection");
+  await page.locator("#historyList .saved-name button").click();
+  assert.equal(await editor.inputValue(),expected);
+ });
+});

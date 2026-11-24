@@ -1,13 +1,27 @@
 /* Ясно — проверка диапазонов и применение правок в координатах исходного текста. */
 (function(root){
  "use strict";
- const segmenter=new Intl.Segmenter("ru",{granularity:"grapheme"});
+ const segmenter=typeof Intl.Segmenter==="function"?new Intl.Segmenter("ru",{granularity:"grapheme"}):null;
+ const simpleCharacter=/^[\t\r\n -~А-Яа-яЁё]$/u;
  const unpairedSurrogate=/[\uD800-\uDFFF]/u;
 
+ function graphemeBoundaries(text){
+  const boundaries=new Set([0,text.length]);
+  if(segmenter){
+   for(const {index} of segmenter.segment(text))boundaries.add(index);
+  }else{
+   // Older browsers can still edit ordinary Russian text. Leave the edges
+   // of unknown clusters alone instead of guessing grapheme boundaries.
+   for(let index=1;index<text.length;index++){
+    const left=text[index-1],right=text[index];
+    if(simpleCharacter.test(left)&&simpleCharacter.test(right)&&!(left==="\r"&&right==="\n"))boundaries.add(index);
+   }
+  }
+  return boundaries;
+ }
  function normalize(text,matches){
   if(!Array.isArray(matches)||!matches.length)return [];
-  const boundaries=new Set([text.length]);
-  for(const {index} of segmenter.segment(text))boundaries.add(index);
+  const boundaries=graphemeBoundaries(text);
   const valid=[];
   for(const match of matches){
    if(!match||!Number.isInteger(match.offset)||!Number.isInteger(match.length)||

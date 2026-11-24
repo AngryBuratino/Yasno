@@ -1,5 +1,5 @@
 /* Ясно: PWA shell only. Text and API responses are NEVER cached. */
-const CACHE="yasno-static-v34";
+const CACHE="yasno-static-v35";
 const ASSETS=["/","/index.html","/styles.css","/app-core.js","/proofread-fallback.js","/business-editor.js","/app.js","/corrections.js","/icon.svg","/manifest.webmanifest"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));

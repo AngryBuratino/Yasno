@@ -206,6 +206,15 @@ async function copyText(text){
 $("copyCorrected").onclick=async()=>{
  const yes=await copyText(selectedCorrections().text);toast(yes?"Исправленный текст скопирован":"Не получилось скопировать — выдели текст вручную");
 };
+function normalizeApiMatches(text,matches){
+ if(!Array.isArray(matches))return [];
+ // Textarea values normalize line endings to LF. Do the same before a
+ // replacement enters the preview so transfer and undo use the same value.
+ return Fix.normalize(text,matches.map(match=>{
+  if(!Array.isArray(match?.replacements))return match;
+  return {...match,replacements:match.replacements.map(value=>typeof value==="string"?value.replace(/\r\n?/g,"\n"):value)};
+ }));
+}
 function checkNow(){
  if(!editor.value.trim()){editor.focus();toast("Сначала введи текст");return}
  state.controller?.abort();
@@ -217,7 +226,7 @@ function checkNow(){
  .then(data=>{
   if(seq!==state.requestId||editor.value!==text)return;
   state.checkedText=text;state.comparisonText=text;state.accepted=[];state.complete=Boolean(data.complete);
-  state.matches=C.filterDictionary(text,Fix.normalize(text,data.matches),state.words);
+  state.matches=C.filterDictionary(text,normalizeApiMatches(text,data.matches),state.words);
   state.lastNote=data.note||(!data.complete?"Сработала только ограниченная локальная проверка. Полный анализ недоступен.":"");
   $("includeReview").checked=false;$("includeStyle").checked=false;
   render();$("result").scrollIntoView({behavior:"smooth",block:"start"});
@@ -283,7 +292,7 @@ $("clearHistory").onclick=()=>{
  state.history=[];erase(keys.history);renderHistory();toast("История удалена");
 };
 const drafts=$("draftMode");state.draftOn=get(keys.draftOn,false)===true;drafts.checked=state.draftOn;
-if(state.draftOn){const savedDraft=get(keys.draft,"");if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft.slice(0,C.MAX_TEXT)}
+if(state.draftOn){const savedDraft=get(keys.draft,"");if(typeof savedDraft==="string"&&savedDraft)editor.value=savedDraft}
 drafts.onchange=()=>{
  state.draftOn=drafts.checked;save(keys.draftOn,state.draftOn);
  if(state.draftOn){persistDraft();toast("Черновик сохраняется только на этом устройстве")}
@@ -388,7 +397,7 @@ if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.ser
 state.words=get(keys.dictionary,[]);if(!Array.isArray(state.words))state.words=[];
 state.words=state.words.filter(C.validDictionaryWord).slice(0,80);
 state.history=get(keys.history,[]);if(!Array.isArray(state.history))state.history=[];
-state.history=state.history.filter(x=>x&&typeof x.text==="string"&&x.text.length<=C.MAX_TEXT).slice(0,12);
+state.history=state.history.filter(x=>x&&typeof x.text==="string").slice(0,12);
 renderMetricsSafe();renderDictionary();renderHistory();renderTemplates();
 function renderMetricsSafe(){refreshMetrics()}
 })();

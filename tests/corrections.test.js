@@ -40,3 +40,16 @@ test("composition reports confirmed edits separately from pending automatic edit
  assert.equal(preview.applied,0);
  assert.equal(preview.confirmedApplied,1);
 });
+
+test("a browser without Intl.Segmenter still applies conservative edits",()=>{
+ const {readFileSync}=require("node:fs");
+ const {runInNewContext}=require("node:vm");
+ const context={Intl:{},window:{}};
+ runInNewContext(readFileSync(require.resolve("../corrections.js"),"utf8"),context);
+ const {compose}=context.window.YasnoCorrections;
+ assert.equal(compose("👩‍💻 е\u0308 Привет",[
+  {offset:1,length:1,replacements:["!"]},
+  {offset:7,length:1,replacements:["!"]},
+  {offset:9,length:6,replacements:["Здравствуйте"]}
+ ]).text,"👩‍💻 е\u0308 Здравствуйте");
+});
