@@ -1,0 +1,422 @@
+[
+  {
+    "id": "holdout-1",
+    "type": "spelling",
+    "input": "К пятнице подготовлю копию доверености для склада.",
+    "target": {
+      "offset": 27,
+      "length": 11,
+      "acceptable": [
+        "доверенности"
+      ],
+      "policy": "auto"
+    },
+    "expected": "К пятнице подготовлю копию доверенности для склада."
+  },
+  {
+    "id": "holdout-2",
+    "type": "spelling",
+    "input": "Ответ уже отправили в каментариях к заявке.",
+    "target": {
+      "offset": 22,
+      "length": 11,
+      "acceptable": [
+        "комментариях"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Ответ уже отправили в комментариях к заявке."
+  },
+  {
+    "id": "holdout-3",
+    "type": "spelling",
+    "input": "В сообщении осталось несколько опичаток.",
+    "target": {
+      "offset": 31,
+      "length": 8,
+      "acceptable": [
+        "опечаток"
+      ],
+      "policy": "auto"
+    },
+    "expected": "В сообщении осталось несколько опечаток."
+  },
+  {
+    "id": "holdout-4",
+    "type": "spelling",
+    "input": "Приложите отсканированые квитанции к письму.",
+    "target": {
+      "offset": 10,
+      "length": 14,
+      "acceptable": [
+        "отсканированные"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Приложите отсканированные квитанции к письму."
+  },
+  {
+    "id": "holdout-5",
+    "type": "spelling",
+    "input": "Они прийдут после обеда.",
+    "target": {
+      "offset": 4,
+      "length": 7,
+      "acceptable": [
+        "придут"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Они придут после обеда."
+  },
+  {
+    "id": "holdout-6",
+    "type": "spelling",
+    "input": "Ребята уже зделали макет.",
+    "target": {
+      "offset": 11,
+      "length": 7,
+      "acceptable": [
+        "сделали"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Ребята уже сделали макет."
+  },
+  {
+    "id": "holdout-7",
+    "type": "spelling",
+    "input": "Диспетчер неотвечает до конца смены.",
+    "target": {
+      "offset": 10,
+      "length": 10,
+      "acceptable": [
+        "не отвечает"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Диспетчер не отвечает до конца смены."
+  },
+  {
+    "id": "holdout-8",
+    "type": "spelling",
+    "input": "Я ни мог открыть архив после обновления.",
+    "target": {
+      "offset": 2,
+      "length": 6,
+      "acceptable": [
+        "не мог"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Я не мог открыть архив после обновления."
+  },
+  {
+    "id": "holdout-9",
+    "type": "spelling",
+    "input": "Предложи кому нибудь взять вторую смену.",
+    "target": {
+      "offset": 9,
+      "length": 11,
+      "acceptable": [
+        "кому-нибудь"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Предложи кому-нибудь взять вторую смену."
+  },
+  {
+    "id": "holdout-10",
+    "type": "spelling",
+    "input": "Утром выезжаем из москвы по новой трассе.",
+    "target": {
+      "offset": 18,
+      "length": 6,
+      "acceptable": [
+        "Москвы"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Утром выезжаем из Москвы по новой трассе."
+  },
+  {
+    "id": "holdout-11",
+    "type": "grammar",
+    "input": "Согласно регламента доступ закроют вечером.",
+    "target": {
+      "offset": 9,
+      "length": 10,
+      "acceptable": [
+        "регламенту"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Согласно регламенту доступ закроют вечером."
+  },
+  {
+    "id": "holdout-12",
+    "type": "grammar",
+    "input": "Вопреки графика работы завершились раньше.",
+    "target": {
+      "offset": 8,
+      "length": 7,
+      "acceptable": [
+        "графику"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Вопреки графику работы завершились раньше."
+  },
+  {
+    "id": "holdout-13",
+    "type": "grammar",
+    "input": "Вы подписал вложение в понедельник.",
+    "target": {
+      "offset": 3,
+      "length": 8,
+      "acceptable": [
+        "подписали"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Вы подписали вложение в понедельник."
+  },
+  {
+    "id": "holdout-14",
+    "type": "grammar",
+    "input": "Мы согласовал смету с подрядчиком.",
+    "target": {
+      "offset": 3,
+      "length": 10,
+      "acceptable": [
+        "согласовали"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Мы согласовали смету с подрядчиком."
+  },
+  {
+    "id": "holdout-15",
+    "type": "grammar",
+    "input": "Они оплатили за доставку после приёмки.",
+    "target": {
+      "offset": 13,
+      "length": 11,
+      "acceptable": [
+        "доставку"
+      ],
+      "policy": "manual"
+    },
+    "expected": "Они оплатили за доставку после приёмки."
+  },
+  {
+    "id": "holdout-16",
+    "type": "punctuation",
+    "input": "Ольга отправьте ведомость бухгалтеру.",
+    "target": {
+      "offset": 0,
+      "length": 5,
+      "acceptable": [
+        "Ольга,"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Ольга, отправьте ведомость бухгалтеру."
+  },
+  {
+    "id": "holdout-17",
+    "type": "punctuation",
+    "input": "Если тебе удобно перезвони после шести.",
+    "target": {
+      "offset": 10,
+      "length": 6,
+      "acceptable": [
+        "удобно,"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Если тебе удобно, перезвони после шести."
+  },
+  {
+    "id": "holdout-18",
+    "type": "punctuation",
+    "input": "Мы задержались потому что опоздал курьер.",
+    "target": {
+      "offset": 3,
+      "length": 11,
+      "acceptable": [
+        "задержались,"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Мы задержались, потому что опоздал курьер."
+  },
+  {
+    "id": "holdout-19",
+    "type": "punctuation",
+    "input": "Получив уведомление мы отправили копии бухгалтеру.",
+    "target": {
+      "offset": 8,
+      "length": 11,
+      "acceptable": [
+        "уведомление,"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Получив уведомление, мы отправили копии бухгалтеру."
+  },
+  {
+    "id": "holdout-20",
+    "type": "grammar",
+    "input": "Окна были закрыто на ночь.",
+    "target": {
+      "offset": 10,
+      "length": 7,
+      "acceptable": [
+        "закрыты"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Окна были закрыты на ночь."
+  },
+  {
+    "id": "holdout-21",
+    "type": "spelling",
+    "input": "Проверьте разщётный листок за март.",
+    "target": {
+      "offset": 10,
+      "length": 9,
+      "acceptable": [
+        "расчётный"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Проверьте расчётный листок за март."
+  },
+  {
+    "id": "holdout-22",
+    "type": "punctuation",
+    "input": "Участники должны принести следующее паспорт и пропуск.",
+    "target": {
+      "offset": 26,
+      "length": 9,
+      "acceptable": [
+        "следующее:"
+      ],
+      "policy": "auto"
+    },
+    "expected": "Участники должны принести следующее: паспорт и пропуск."
+  },
+  {
+    "id": "holdout-23",
+    "type": "control",
+    "input": "Согласно регламенту, доступ закроют вечером.",
+    "target": null,
+    "expected": "Согласно регламенту, доступ закроют вечером."
+  },
+  {
+    "id": "holdout-24",
+    "type": "control",
+    "input": "Благодаря Анну за помощь, он улыбнулся.",
+    "target": null,
+    "expected": "Благодаря Анну за помощь, он улыбнулся."
+  },
+  {
+    "id": "holdout-25",
+    "type": "control",
+    "input": "Они оплатили за клиента всю доставку.",
+    "target": null,
+    "expected": "Они оплатили за клиента всю доставку."
+  },
+  {
+    "id": "holdout-26",
+    "type": "control",
+    "input": "Нет ни одного свободного места до пятницы.",
+    "target": null,
+    "expected": "Нет ни одного свободного места до пятницы."
+  },
+  {
+    "id": "holdout-27",
+    "type": "control",
+    "input": "Кто то окно открыл?",
+    "target": null,
+    "expected": "Кто то окно открыл?"
+  },
+  {
+    "id": "holdout-28",
+    "type": "control",
+    "input": "Пока мы не знаем, кому-нибудь понадобится пропуск?",
+    "target": null,
+    "expected": "Пока мы не знаем, кому-нибудь понадобится пропуск?"
+  },
+  {
+    "id": "holdout-29",
+    "type": "control",
+    "input": "Ольга отправляет документы только по пятницам.",
+    "target": null,
+    "expected": "Ольга отправляет документы только по пятницам."
+  },
+  {
+    "id": "holdout-30",
+    "type": "control",
+    "input": "Если вы сможете приехать, позвоните перед выездом.",
+    "target": null,
+    "expected": "Если вы сможете приехать, позвоните перед выездом."
+  },
+  {
+    "id": "holdout-31",
+    "type": "control",
+    "input": "Мы задержались не потому, что опоздал курьер.",
+    "target": null,
+    "expected": "Мы задержались не потому, что опоздал курьер."
+  },
+  {
+    "id": "holdout-32",
+    "type": "control",
+    "input": "Вчера мы выходим из офиса, а на улице уже снег.",
+    "target": null,
+    "expected": "Вчера мы выходим из офиса, а на улице уже снег."
+  },
+  {
+    "id": "holdout-33",
+    "type": "control",
+    "input": "В реестре указан код «зделали», его нужно ввести дословно.",
+    "target": null,
+    "expected": "В реестре указан код «зделали», его нужно ввести дословно."
+  },
+  {
+    "id": "holdout-34",
+    "type": "control",
+    "input": "Загрузите файл по адресу https://example.test/доверености.",
+    "target": null,
+    "expected": "Загрузите файл по адресу https://example.test/доверености."
+  },
+  {
+    "id": "holdout-35",
+    "type": "control",
+    "input": "В счёте на 39 280,50 ₽ от 3 марта скидка не обещана.",
+    "target": null,
+    "expected": "В счёте на 39 280,50 ₽ от 3 марта скидка не обещана."
+  },
+  {
+    "id": "holdout-36",
+    "type": "control",
+    "input": "Ответственный — Сергей. Встречу перенесли до 18:00.",
+    "target": null,
+    "expected": "Ответственный — Сергей. Встречу перенесли до 18:00."
+  },
+  {
+    "id": "holdout-37",
+    "type": "control",
+    "input": "Мария не обещала выслать приложение сегодня.",
+    "target": null,
+    "expected": "Мария не обещала выслать приложение сегодня."
+  },
+  {
+    "id": "holdout-38",
+    "type": "control",
+    "input": "Не меняйте значение переменной `прийдут` в отчёте.",
+    "target": null,
+    "expected": "Не меняйте значение переменной `прийдут` в отчёте."
+  }
+]

@@ -1,12 +1,13 @@
 /* Ясно 3.2 — общие осторожные правила для браузера и API. Без ИИ. */
 (function(root){"use strict";
+ const Russian=typeof module!=="undefined"&&module.exports?require("./russian-language.js"):root.YasnoRussian;
  const types={spelling:"Орфография",punctuation:"Пунктуация",grammar:"Грамматика",style:"Совет по стилю"};
  function make(offset,length,replacement,type,message,id){
   return {offset,length,replacements:[replacement],type,category:types[type]||"Замечание",message,ruleId:id,source:"local"};
  }
  function suggest(text){
   text=String(text||"");
-  const matches=[];
+  const matches=Russian.suggest(text);
   function add(regex,handler){
    for(const m of text.matchAll(regex)){
     const v=handler(m);
@@ -35,13 +36,13 @@
   add(/(^|\n)([ \t]*(?:Все|Всё|все|всё)[ \t]+так[ \t]+же[ \t]+нужна[ \t]+почта)([ \t]*)(?=\r?$)/gmu,
    m=>make(m.index+m[1].length+m[2].length,0,".","punctuation",
     "В конце законченного предложения нужна точка.","EMAIL_PERIOD"));
-  return matches.sort((a,b)=>a.offset-b.offset||b.length-a.length);
+  return Russian.editable(text,matches).sort((a,b)=>a.offset-b.offset||b.length-a.length);
  }
  const Fix=typeof module!=="undefined"&&module.exports?require("./corrections.js"):root.YasnoCorrections;
  function apply(text,matches){
   return Fix.compose(text,matches).text;
  }
- const api={suggest,apply};
+ const api={suggest,apply,editable:Russian.editable};
  if(typeof module!=="undefined"&&module.exports)module.exports=api;
  root.YasnoFallback=api;
 })(typeof window!=="undefined"?window:{});

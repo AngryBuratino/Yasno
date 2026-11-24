@@ -108,7 +108,7 @@ test("a large raw request is rejected before an upstream call",async t=>{
 
 test("many external suggestions cannot fill the response ahead of local corrections",async t=>{
  const text="Обычный текст. Пришлите пожалуйста ответ.";
- const candidates=Array.from({length:110},()=>({offset:0,length:7,replacements:[{value:"Другой"}]}));
+ const candidates=Array.from({length:110},(_,index)=>({offset:0,length:7,replacements:[{value:"Другой "+index}]}));
  t.mock.method(globalThis,"fetch",async()=>response({matches:candidates}));
  const result=await invoke(text);
  assert.equal(result.truncated,true);

@@ -14,7 +14,7 @@ function localMatches(text,businessMode=false){
  const add=(re,fn)=>{for(const m of text.matchAll(re)){const v=fn(m);if(v)out.push(v)}};
  const swap=(re,repl,type,msg,id)=>add(re,m=>item(m.index,m[0].length,repl(m[0]),type,msg,id));
  swap(/на этой недели/giu,s=>s[0]===s[0].toUpperCase()?"На этой неделе":"на этой неделе","grammar","Правильно: «на этой неделе» (предложный падеж).","LOCAL_WEEK");
- swap(/тоже самое/giu,s=>s[0]===s[0].toUpperCase()?"То же самое":"то же самое","spelling","В выражении «то же самое» частица «же» пишется отдельно.","LOCAL_SAME");
+ swap(/(?<![\p{L}\p{N}])тоже[ \t]+самое(?=[ \t]*(?:[.,!?;:\r\n]|$))/giu,s=>s[0]===s[0].toUpperCase()?"То же самое":"то же самое","spelling","В выражении «то же самое» частица «же» пишется отдельно.","LOCAL_SAME");
  swap(/удалось[ \t]+познакомится/giu,s=>s.replace(/познакомится/iu,"познакомиться"),"grammar","После «удалось» требуется инфинитив «познакомиться».","LOCAL_MEET");
  swap(/треннинги/giu,s=>s[0]===s[0].toUpperCase()?"Тренинги":"тренинги","spelling","«Тренинги» пишется с одной «н» после «е».","LOCAL_TRAINING");
  swap(/интернет[ \t]+эквайринг[а-яё]*/giu,s=>s.replace(/[ \t]+/,"-"),"spelling","«Интернет-эквайринг» пишется через дефис.","LOCAL_INTERNET");
@@ -35,12 +35,22 @@ function localMatches(text,businessMode=false){
  add(/(^|[.!?][ \t]+)(Пожалуйста)([ \t]+)(?=[А-Яа-яЁё])/gimu,m=>item(m.index+m[1].length,m[2].length,m[2]+",","punctuation",please,"LOCAL_PLEASE_START"));
  add(/(^|[\n.!?][ \t]*)(Коллеги)([ \t]+)(привет|добрый день)(?=$|[ \t!.,])/gimu,m=>item(m.index+m[1].length+m[2].length,0,",","punctuation","После обращения «коллеги» нужна запятая.","LOCAL_COLLEAGUES"));
  add(/([А-Яа-яЁё])([ \t]+)(а|но)(?=[ \t]+[А-Яа-яЁё])/giu,m=>manual(item(m.index+m[1].length,0,",","punctuation","Если «а» или «но» соединяет части предложения, проверь запятую.","LOCAL_BUT")));
- add(/([А-Яа-яЁё])([ \t]+)(и я[ \t]+(?:создам|отправлю|проверю|посмотрю|назначу|организую|подготовлю|сверюсь))(?=$|[ \t.,!?])/giu,m=>item(m.index+m[1].length,0,",","punctuation","«И» соединяет две части предложения с разными грамматическими основами.","LOCAL_AND_I"));
+ add(/([А-Яа-яЁё])([ \t]+)(и я[ \t]+(?:создам|отправлю|проверю|посмотрю|назначу|организую|подготовлю|сверюсь))(?=$|[ \t.,!?])/giu,m=>{
+  const start=Math.max(0,m.index-180);
+  const prefix=text.slice(start,m.index+m[1].length);
+  const clause=prefix.split(/[.!?;:\r\n]/u).at(-1);
+  if(start&&clause===prefix)return null;
+  // A direct request followed by the writer's own action is distinct
+  // from coordinated clauses under a shared condition or circumstance.
+  if(!/^[ \t]*(?:пришлите|отправьте|напишите|укажите|передайте|сообщите|дайте)(?![\p{L}\p{N}])/iu.test(clause)||
+     /(?<![\p{L}])(?:если|когда|пока|чтобы|поскольку)(?![\p{L}])/iu.test(clause))return null;
+  return item(m.index+m[1].length,0,",","punctuation","«И» соединяет просьбу и самостоятельное действие автора.","LOCAL_AND_I");
+ });
  add(/(встречи)([ \t]+)(на которых)(?=[ \t]+[А-Яа-яЁё])/giu,m=>item(m.index+m[1].length,0,",","punctuation","Придаточная часть «на которых ...» отделяется запятой.","LOCAL_RELATIVE"));
  if(businessMode){
    add(/(?<![\p{L}])robokassa(?![\p{L}])/giu,m=>m[0]==="Robokassa"?null:item(m.index,m[0].length,"Robokassa","spelling","Написание названия сервиса — Robokassa.","BRAND_ROBOKASSA"));
    add(/(?<![\p{L}])продамус(?![\p{L}])/giu,m=>m[0]==="Prodamus"?null:item(m.index,m[0].length,"Prodamus","spelling","Написание названия сервиса — Prodamus.","BRAND_PRODAMUS"));
-   add(/«долями»/giu,m=>m[0]==="«Долями»"?null:item(m.index,m[0].length,"«Долями»","spelling","В названии сервиса «Долями» первая буква прописная.","BRAND_DOLYAMI"));
+   add(/(?<=сервис(?:а|ом|у)?[ \t]+)«долями»/giu,m=>m[0]==="«Долями»"?null:item(m.index,m[0].length,"«Долями»","spelling","В названии сервиса «Долями» первая буква прописная.","BRAND_DOLYAMI"));
    add(/почты(?![А-Яа-яЁё])/giu,m=>{
      const before=text.slice(Math.max(0,m.index-90),m.index).split(/[.!?\n]/).pop();
      if(/электронной[ \t]+$/iu.test(before))return null;
@@ -58,11 +68,13 @@ function localMatches(text,businessMode=false){
 
 function candidates(text,{businessMode=false,deepCheck=false}={}){
  const base=localMatches(text,businessMode);
- return deepCheck?[...base,...advanced.reviewSuggestions(text)]:base;
+ if(!deepCheck)return base;
+ const insertions=new Set(base.filter(match=>match.length===0&&match.replacements[0]===",").map(match=>match.offset));
+ return [...base,...advanced.reviewSuggestions(text).filter(match=>!insertions.has(match.offset))];
 }
 
 function select(text,matches){
- const normalized=Fix.normalize(text,matches);
+ const normalized=shared.editable(text,Fix.normalize(text,matches));
  function priority(match){
   if(!match.replacements.length)return 4;
   if(match.source==="LanguageTool")return 3;
@@ -71,7 +83,15 @@ function select(text,matches){
  }
  // Keep local applicable edits ahead of remote suggestions if the result is capped.
  normalized.sort((a,b)=>priority(a)-priority(b)||a.offset-b.offset);
- return {matches:normalized.slice(0,100).sort((a,b)=>a.offset-b.offset),truncated:normalized.length>100};
+ const seen=new Set();
+ const unique=normalized.filter(match=>{
+  if(!match.replacements.length)return true;
+  const key=JSON.stringify([match.offset,match.length,[...match.replacements].sort()]);
+  if(seen.has(key))return false;
+  seen.add(key);
+  return true;
+ });
+ return {matches:unique.slice(0,100).sort((a,b)=>a.offset-b.offset),truncated:unique.length>100};
 }
 
 const api={labels,localMatches,candidates,select};

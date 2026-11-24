@@ -419,7 +419,7 @@ function renderEditorial(){
 }
 function previewEditorial(){
  if(!editor.value.trim()){toast("Сначала введи текст для редактуры");editor.focus();return}
- const source=editor.value,result=Business.polish(source);
+ const source=editor.value,result=Business.polish(source,state.words);
  editorialDraft={source,base:result.text,text:result.text,matches:result.suggestions,accepted:[],undo:[],
   automaticCount:result.changes.reduce((total,change)=>total+change.count,0)};
  $("editorialChanges").textContent=result.changes.length?

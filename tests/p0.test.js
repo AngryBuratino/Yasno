@@ -90,9 +90,9 @@ test("business preview keeps meaning and asks for separate decisions about each 
   "Покажите данные кнопки на странице оплаты. К оплате 12 500 ₽ до 18 декабря. Ответственная — Анна.";
  const result = polish(text);
  assert.equal(result.text, text);
- assert.deepEqual(result.suggestions.map(m => m.ruleId), ["EMAIL_TONE", "SCHEDULE", "PAYMENT"]);
+ assert.deepEqual(result.suggestions.map(m => m.ruleId), ["SCHEDULE", "PAYMENT"]);
  assert.equal(compose(result.text, result.suggestions, true, true).text, text);
- const marked = confirm(result.text, result.suggestions, [], 2, "эти способы оплаты на странице оплаты");
+ const marked = confirm(result.text, result.suggestions, [], 1, "эти способы оплаты на странице оплаты");
  assert.match(marked.text, /Покажите эти способы оплаты/u);
  assert.match(marked.text, /нужна почта.*бумажных письмах/u);
  assert.match(marked.text, /12 500 ₽ до 18 декабря. Ответственная — Анна\./u);
